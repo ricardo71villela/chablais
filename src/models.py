@@ -18,5 +18,9 @@ class Listing:
     morada: Optional[str] = None
     referencia_agencia: Optional[str] = None
     fotos: list[str] = field(default_factory=list)
+    foto_capa: Optional[str] = None       # imagem principal/capa do anúncio
     titulo: Optional[str] = None
-    descricao: Optional[str] = None
+    descricao: Optional[str] = None       # texto completo do bloco/anúncio
+    dpe_classe: Optional[str] = None      # classe energética A-G, quando publicada
+    ano_construcao: Optional[int] = None
+    comodidades: list[str] = field(default_factory=list)  # ex. Garagem, Piscina, Terraço

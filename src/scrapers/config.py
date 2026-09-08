@@ -36,16 +36,25 @@ CENTURY21_TARGETS = [
 ]
 
 LAFORET_TARGETS = [
+    # nota: uma única página cobre Thonon + Évian + comunas vizinhas; o
+    # scraper filtra internamente e só devolve Thonon/Évian (ver
+    # laforet_scraper.py). O campo `cidade` aqui é só um valor de partida.
     AgencyTarget(
         agencia_nome="Laforêt Thonon-Évian",
-        cidade="Thonon",  # nota: esta página cobre Thonon + Évian, ver stub
+        cidade="Thonon-Evian",
         listing_url="https://www.laforet.com/agence-immobiliere/thonon-evian/acheter",
         tipo_transacao="venda",
+    ),
+    AgencyTarget(
+        agencia_nome="Laforêt Thonon-Évian",
+        cidade="Thonon-Evian",
+        listing_url="https://www.laforet.com/agence-immobiliere/thonon-evian/louer",
+        tipo_transacao="arrendamento",
     ),
 ]
 
 # Cada entrada: (instância do scraper, lista de targets)
 REGISTRY = [
     (Century21Scraper(), CENTURY21_TARGETS),
-    (LaforetScraper(), LAFORET_TARGETS),  # ainda lança NotImplementedError
+    (LaforetScraper(), LAFORET_TARGETS),
 ]

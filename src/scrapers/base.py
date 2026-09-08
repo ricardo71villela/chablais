@@ -31,13 +31,34 @@ def fetch_html(url: str) -> BeautifulSoup:
     return BeautifulSoup(resp.text, "html.parser")
 
 
-# --- Helpers de extração por regex (preço, superfície, divisões) ----------
+# --- Helpers de extração por regex --------------------------------------
 
 PRICE_RE = re.compile(r"([\d\s]{3,})\s*€")
 SURFACE_RE = re.compile(r"([\d,.]+)\s*m[²2]")
 ROOMS_RE = re.compile(r"(\d+)\s*pi[eè]ces?", re.IGNORECASE)
 BEDROOMS_RE = re.compile(r"(\d+)\s*chambres?", re.IGNORECASE)
 REF_RE = re.compile(r"[Rr][ée]f\s*:?\s*(\S+)")
+DPE_RE = re.compile(r"DPE\s*[:\-]?\s*classe\s*([A-G])|classe\s*([A-G])\s*DPE", re.IGNORECASE)
+ANO_CONSTRUCAO_RE = re.compile(
+    r"(?:construite?|construction|b[âa]tie?)\s*(?:en)?\s*:?\s*(\d{4})", re.IGNORECASE
+)
+
+# Palavras-chave de comodidades a procurar no texto do anúncio (case-insensitive).
+# O valor devolvido é a forma normalizada em português para gravar na base de dados.
+COMODIDADES_KEYWORDS = {
+    "garage": "Garagem",
+    "parking": "Parking",
+    "piscine": "Piscina",
+    "terrasse": "Terraço",
+    "balcon": "Varanda",
+    "cave": "Cave",
+    "ascenseur": "Elevador",
+    "jardin": "Jardim",
+    "chemin[ée]e": "Lareira",
+    "acc[èe]s handicap[ée]": "Acesso mobilidade reduzida",
+    "climatisation": "Ar condicionado",
+    "meubl[ée]": "Mobilado",
+}
 
 
 def extract_price(text: str) -> str | None:
@@ -63,6 +84,29 @@ def extract_bedrooms(text: str) -> int | None:
 def extract_ref(text: str) -> str | None:
     m = REF_RE.search(text)
     return m.group(1) if m else None
+
+
+def extract_dpe(text: str) -> str | None:
+    m = DPE_RE.search(text)
+    if not m:
+        return None
+    return (m.group(1) or m.group(2) or "").upper() or None
+
+
+def extract_ano_construcao(text: str) -> int | None:
+    m = ANO_CONSTRUCAO_RE.search(text)
+    if not m:
+        return None
+    ano = int(m.group(1))
+    return ano if 1800 <= ano <= 2100 else None
+
+
+def extract_comodidades(text: str) -> list[str]:
+    found = []
+    for pattern, label in COMODIDADES_KEYWORDS.items():
+        if re.search(pattern, text, re.IGNORECASE):
+            found.append(label)
+    return found
 
 
 @dataclass

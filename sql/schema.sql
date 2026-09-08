@@ -26,8 +26,15 @@ create table if not exists imoveis (
     morada              text,
     cidade              text,
     fotos               text[] default '{}',
+    foto_capa           text,                   -- imagem principal/capa do anúncio
+    descricao           text,                   -- texto completo extraído do anúncio
+    dpe_classe          text,                   -- classe energética A-G, quando publicada
+    ano_construcao      int,
+    comodidades         text[] default '{}',    -- ex. {Garagem, Piscina, Terraço}
     referencia_agencia  text,                   -- ref. interna da agência (ex. "157523")
     hash_conteudo       text,                   -- para deteção rápida de alterações
+    fingerprint_duplicado  text,                -- aproximação p/ detetar o mesmo imóvel em agências diferentes
+    possivel_duplicado_de  uuid references imoveis(id),  -- aponta para o registo "canónico" do grupo de duplicados
     primeira_deteccao   timestamptz not null default now(),
     ultima_atualizacao  timestamptz not null default now(),
     estado              text not null default 'ativo'  -- 'ativo' | 'removido'
@@ -36,3 +43,4 @@ create table if not exists imoveis (
 create index if not exists idx_imoveis_agencia on imoveis(agencia_id);
 create index if not exists idx_imoveis_estado on imoveis(estado);
 create index if not exists idx_imoveis_cidade on imoveis(cidade);
+create index if not exists idx_imoveis_fingerprint on imoveis(fingerprint_duplicado);

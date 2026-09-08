@@ -18,7 +18,10 @@ from src.models import Listing
 from src.scrapers.base import (
     AgencyScraper,
     AgencyTarget,
+    extract_ano_construcao,
     extract_bedrooms,
+    extract_comodidades,
+    extract_dpe,
     extract_price,
     extract_ref,
     extract_rooms,
@@ -79,7 +82,12 @@ class Century21Scraper(AgencyScraper):
                         num_quartos=extract_bedrooms(block_text),
                         referencia_agencia=extract_ref(block_text),
                         fotos=imgs,
+                        foto_capa=imgs[0] if imgs else None,
                         titulo=block_text[:150],
+                        descricao=block_text,
+                        dpe_classe=extract_dpe(block_text),
+                        ano_construcao=extract_ano_construcao(block_text),
+                        comodidades=extract_comodidades(block_text),
                     )
                 )
 

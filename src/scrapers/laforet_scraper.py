@@ -1,34 +1,109 @@
-"""Scraper para a rede Laforêt — STUB, por completar.
+"""Scraper para a agência Laforêt Thonon-Évian.
 
-A agência Laforêt Thonon-Évian tem uma página de listagem única que cobre
-as duas cidades:
+A agência cobre Thonon-Évian e comunas vizinhas (Perrignier, Neuvecelle,
+Douvaine, Publier, Saint-Gingolph, Armoy, etc.) na mesma página de listagem:
   https://www.laforet.com/agence-immobiliere/thonon-evian/acheter
 
-O que falta antes de este scraper funcionar:
-  1. Confirmar o padrão de URL de cada anúncio individual (não visível no
-     texto já extraído — os links "Appeler"/"(nouvel onglet)" sugerem que o
-     link para o anúncio está noutro elemento, provavelmente a imagem ou o
-     título do card).
-  2. Confirmar se a paginação usa `?page=N` (visto num URL de exemplo:
-     `?page=5`) ou outro mecanismo.
-  3. Como a página mistura resultados de Thonon e de Évian, será necessário
-     filtrar por cidade a partir do texto de cada card (já presente:
-     "THONON LES BAINS (74200)" / "Évian-les-Bains").
+Padrão de URL dos anúncios:
+  /agence-immobiliere/thonon-evian/acheter/<cidade-slug>/<tipo>-<id>
+  ex: /agence-immobiliere/thonon-evian/acheter/thonon-les-bains/appartement-4-pieces-52789637
 
-Uma vez confirmados os pontos acima, a implementação deve seguir o mesmo
-padrão do `century21_scraper.py`: localizar os links de anúncio, subir ao
-bloco-pai, extrair com as mesmas funções de `base.py`.
+Como o âmbito do projeto é só Thonon-les-Bains e Évian-les-Bains, este
+scraper filtra e descarta os imóveis de outras comunas (Perrignier,
+Douvaine, etc.) com base na cidade extraída de cada anúncio.
+
+Atenção: paginação assumida via `?page=N` (visto num URL de exemplo do
+mesmo site, para uma página de listagem diferente). Se a paginação não
+avançar como esperado, confirmar o mecanismo real (pode ser scroll
+infinito via JavaScript, o que exigiria Playwright em vez de requests
+simples).
 """
+import re
+from urllib.parse import urljoin
+
 from src.models import Listing
-from src.scrapers.base import AgencyScraper, AgencyTarget
+from src.scrapers.base import (
+    AgencyScraper,
+    AgencyTarget,
+    extract_ano_construcao,
+    extract_bedrooms,
+    extract_comodidades,
+    extract_dpe,
+    extract_price,
+    extract_rooms,
+    extract_surface,
+    fetch_html,
+)
+
+DETAIL_LINK_RE = re.compile(r"/agence-immobiliere/thonon-evian/(?:acheter|louer)/[^/?#]+/[^/?#]+-\d+")
+CITY_RE = re.compile(r"([A-ZÀ-Ü][A-ZÀ-Ü\s\-']{2,})\s*\((\d{5})\)")
+MAX_PAGES = 15
+CIDADES_ALVO = {"thonon", "evian", "évian"}  # filtra fora comunas vizinhas
 
 
 class LaforetScraper(AgencyScraper):
     network_name = "Laforet"
 
     def fetch_listings(self, target: AgencyTarget) -> list[Listing]:
-        raise NotImplementedError(
-            "Scraper Laforêt ainda não implementado — ver notas no topo deste "
-            "ficheiro. Inspecionar o HTML real da página de listagem antes de "
-            "avançar."
-        )
+        listings: list[Listing] = []
+        seen_urls: set[str] = set()
+        page = 1
+
+        while page <= MAX_PAGES:
+            page_url = target.listing_url if page == 1 else f"{target.listing_url}?page={page}"
+            soup = fetch_html(page_url)
+            anchors = [
+                a for a in soup.find_all("a", href=True) if DETAIL_LINK_RE.search(a["href"])
+            ]
+            if not anchors:
+                break
+
+            new_on_page = 0
+            for a in anchors:
+                href = urljoin(page_url, a["href"])
+                if href in seen_urls:
+                    continue
+                seen_urls.add(href)
+                new_on_page += 1
+
+                block = a.find_parent(["article", "li", "div"]) or a
+                block_text = block.get_text(" ", strip=True)
+
+                city_match = CITY_RE.search(block_text)
+                cidade_texto = city_match.group(1).strip() if city_match else ""
+                cidade_norm = cidade_texto.lower()
+                if not any(alvo in cidade_norm for alvo in CIDADES_ALVO):
+                    continue  # fora do âmbito (comuna vizinha) — descarta
+
+                imgs = [
+                    img["src"]
+                    for img in block.find_all("img", src=True)
+                    if img["src"].startswith("http")
+                ]
+
+                listings.append(
+                    Listing(
+                        agencia_nome=target.agencia_nome,
+                        cidade="Thonon" if "thonon" in cidade_norm else "Evian",
+                        url_anuncio=href,
+                        tipo_transacao=target.tipo_transacao,
+                        preco_raw=extract_price(block_text),
+                        superficie_raw=extract_surface(block_text),
+                        num_divisoes=extract_rooms(block_text),
+                        num_quartos=extract_bedrooms(block_text),
+                        morada=cidade_texto,
+                        fotos=imgs,
+                        foto_capa=imgs[0] if imgs else None,
+                        titulo=block_text[:150],
+                        descricao=block_text,
+                        dpe_classe=extract_dpe(block_text),
+                        ano_construcao=extract_ano_construcao(block_text),
+                        comodidades=extract_comodidades(block_text),
+                    )
+                )
+
+            if new_on_page == 0:
+                break
+            page += 1
+
+        return listings

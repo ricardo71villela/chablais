@@ -6,8 +6,14 @@ Estratégia:
   - no fim de cada corrida por agência, marca como 'removido' todos os
     imóveis dessa agência que não apareceram na corrida atual (deixaram de
     estar publicados).
+  - no fim de TODAS as agências, corre uma passagem de deduplicação: quando
+    duas agências diferentes anunciam o que parece ser o mesmo imóvel
+    (mesmo `fingerprint_duplicado` — cidade, tipo, preço e superfície
+    aproximados), aponta o mais recente para o mais antigo via
+    `possivel_duplicado_de`, sem apagar nenhum dos dois registos.
 """
 import os
+from collections import defaultdict
 from datetime import datetime, timezone
 
 from supabase import Client, create_client
@@ -51,3 +57,43 @@ def upsert_listings(client: Client, agencia_id: str, listings: list[dict]) -> No
             .eq("estado", "ativo")
             .execute()
         )
+
+
+def mark_duplicates(client: Client) -> int:
+    """Agrupa os imóveis ativos por `fingerprint_duplicado` e, para cada
+    grupo que envolva mais do que uma agência, aponta os registos mais
+    recentes para o mais antigo (`possivel_duplicado_de`).
+
+    Devolve o número de registos marcados como duplicado nesta passagem.
+    Corre a lógica de agrupamento em Python (o volume de dados é pequeno
+    o suficiente para isso ser simples e fiável).
+    """
+    resp = (
+        client.table("imoveis")
+        .select("id,agencia_id,fingerprint_duplicado,primeira_deteccao,possivel_duplicado_de")
+        .eq("estado", "ativo")
+        .not_.is_("fingerprint_duplicado", "null")
+        .execute()
+    )
+
+    grupos: dict[str, list[dict]] = defaultdict(list)
+    for row in resp.data:
+        grupos[row["fingerprint_duplicado"]].append(row)
+
+    marcados = 0
+    for fingerprint, itens in grupos.items():
+        agencias_envolvidas = {i["agencia_id"] for i in itens}
+        if len(itens) < 2 or len(agencias_envolvidas) < 2:
+            continue  # não é duplicado entre agências diferentes — ignora
+
+        itens.sort(key=lambda i: i["primeira_deteccao"])
+        canonico = itens[0]
+        for duplicado in itens[1:]:
+            if duplicado.get("possivel_duplicado_de") == canonico["id"]:
+                continue  # já estava marcado corretamente
+            client.table("imoveis").update(
+                {"possivel_duplicado_de": canonico["id"]}
+            ).eq("id", duplicado["id"]).execute()
+            marcados += 1
+
+    return marcados

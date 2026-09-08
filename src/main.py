@@ -1,12 +1,13 @@
 """Orquestrador: corre todos os scrapers registados e grava no Supabase."""
 import logging
 
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
+
 load_dotenv()
 
 from src.normalize import normalize
 from src.scrapers.config import REGISTRY
-from src.upsert_supabase import get_client, get_or_create_agencia, upsert_listings
+from src.upsert_supabase import get_client, get_or_create_agencia, mark_duplicates, upsert_listings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -48,6 +49,10 @@ def main() -> None:
             )
             upsert_listings(client, agencia_id, normalized_listings)
             log.info("Gravados %d imóveis para %s", len(normalized_listings), agencia_nome)
+
+    log.info("A procurar duplicados entre agências...")
+    total_marcados = mark_duplicates(client)
+    log.info("Duplicados marcados nesta corrida: %d", total_marcados)
 
 
 if __name__ == "__main__":
