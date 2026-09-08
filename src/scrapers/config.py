@@ -84,17 +84,38 @@ POIRIER_TARGETS = [
 ]
 
 # --- Imogroup ---------------------------------------------------------------
-# Confirmado: detail links em /fr/vente/vente-<tipo>-<cidade>,VA<id>
+# Confirmado: detail links em /fr/vente/<slug>/<ID-hexadecimal>
+# ex: /fr/vente/appartement-3-pieces-thonon-les-bains-74200/6798CD9C05576143944643
+# Listagem filtrada por tipo (site não parece ter uma vista "todos os tipos"
+# por cidade) — cobre apartamentos e casas, os tipos mais comuns.
 IMOGROUP_CONFIG = SiteConfig(
     network_name="Imogroup",
-    detail_link_pattern=re.compile(r"/fr/vente/vente-[^,/?#]+,VA\d+"),
+    detail_link_pattern=re.compile(r"/fr/vente/[^/?#]+-\d{4,5}/[A-Za-z0-9]{15,}"),
     page_url_template=None,  # a confirmar se há paginação além da 1ª página
 )
 IMOGROUP_TARGETS = [
     AgencyTarget(
-        agencia_nome="Imogroup Thonon-Évian",
+        agencia_nome="Imogroup Thonon",
         cidade="Thonon",
-        listing_url="https://www.imogroup-thonon-evian.com/fr/annonce-immobiliere/vente-thonon-les-bains-&-evian-les-bains/vente-appartement-a-thonon-les-bains-74200",
+        listing_url="https://www.imogroup-thonon-evian.com/fr/vente/appartement/thonon-les-bains/74200",
+        tipo_transacao="venda",
+    ),
+    AgencyTarget(
+        agencia_nome="Imogroup Thonon",
+        cidade="Thonon",
+        listing_url="https://www.imogroup-thonon-evian.com/fr/vente/maison/thonon-les-bains/74200",
+        tipo_transacao="venda",
+    ),
+    AgencyTarget(
+        agencia_nome="Imogroup Évian",
+        cidade="Evian",
+        listing_url="https://www.imogroup-thonon-evian.com/fr/vente/appartement/evian-les-bains/74500",
+        tipo_transacao="venda",
+    ),
+    AgencyTarget(
+        agencia_nome="Imogroup Évian",
+        cidade="Evian",
+        listing_url="https://www.imogroup-thonon-evian.com/fr/vente/maison/evian-les-bains/74500",
         tipo_transacao="venda",
     ),
 ]
