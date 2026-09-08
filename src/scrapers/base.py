@@ -4,6 +4,7 @@ Nota de confidencialidade: o User-Agent usado aqui é genérico de propósito �
 nunca incluir o nome do projeto, da agência de origem (DECORDIER) ou qualquer
 identificador que ligue os pedidos HTTP a este projeto.
 """
+import logging
 import re
 import time
 from abc import ABC, abstractmethod
@@ -13,6 +14,8 @@ import requests
 from bs4 import BeautifulSoup
 
 from src.models import Listing
+
+log = logging.getLogger(__name__)
 
 GENERIC_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -49,13 +52,35 @@ def fetch_html_rendered(url: str, wait_selector: str | None = None) -> Beautiful
     nunca deixam o "networkidle" disparar, mesmo com o conteúdo principal já
     carregado. O wait_for_selector a seguir garante que esperamos pelo
     conteúdo real, não apenas pelo HTML inicial.
+
+    Tenta também fechar banners de cookies comuns (OneTrust, Axeptio, etc.),
+    já que alguns sites só carregam o resto da página depois de uma
+    interação do utilizador com esse banner.
     """
     from playwright.sync_api import sync_playwright
+
+    COOKIE_BUTTON_SELECTORS = [
+        "#onetrust-accept-btn-handler",
+        "button:has-text('Accepter')",
+        "button:has-text(\"J'accepte\")",
+        "button:has-text('Tout accepter')",
+        ".axeptio_widget button",
+        "#axeptio_btn_acceptAll",
+    ]
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(user_agent=GENERIC_USER_AGENT)
         page.goto(url, timeout=45000, wait_until="domcontentloaded")
+
+        for selector in COOKIE_BUTTON_SELECTORS:
+            try:
+                page.click(selector, timeout=2000)
+                page.wait_for_timeout(500)
+                break
+            except Exception:
+                continue  # este banner não apareceu, tenta o próximo
+
         if wait_selector:
             try:
                 page.wait_for_selector(wait_selector, timeout=20000)
@@ -63,7 +88,14 @@ def fetch_html_rendered(url: str, wait_selector: str | None = None) -> Beautiful
                 pass  # segue com o que já carregou, mesmo que o seletor não apareça
         else:
             page.wait_for_timeout(3000)  # dá tempo ao JS correr quando não há seletor específico
+
         html = page.content()
+        if wait_selector:
+            count = page.locator(wait_selector).count()
+            log.info(
+                "fetch_html_rendered(%s): %d elementos a corresponder a '%s', HTML com %d chars, título='%s'",
+                url, count, wait_selector, len(html), page.title(),
+            )
         browser.close()
     time.sleep(REQUEST_DELAY_SECONDS)
     return BeautifulSoup(html, "html.parser")
