@@ -166,6 +166,31 @@ SQUARE_HABITAT_TARGETS = [
     ),
 ]
 
+# --- BARNES Léman -----------------------------------------------------
+# Confirmado: server-side (sem JS). Detail links em
+# /en/luxury-real-estate/<cidade-slug>/<tipo>/<slug>-<id>
+# Nota: usa a versão inglesa do site (/en/) — a francesa tem URLs diferentes
+# e não foi testada; a versão inglesa funciona bem e os dados são os mesmos.
+BARNES_CONFIG = SiteConfig(
+    network_name="Barnes",
+    detail_link_pattern=re.compile(r"/en/luxury-real-estate/[^/?#]+/[^/?#]+/[^/?#]+-\d+"),
+    page_url_template=None,  # ~14 resultados numa só página; a confirmar se há mais
+)
+BARNES_TARGETS = [
+    AgencyTarget(
+        agencia_nome="BARNES Léman Thonon",
+        cidade="Thonon",
+        listing_url="https://www.barnes-leman.com/en/luxury-real-estate/thonon-les-bains-74200/",
+        tipo_transacao="venda",
+    ),
+    AgencyTarget(
+        agencia_nome="BARNES Léman Évian",
+        cidade="Evian",
+        listing_url="https://www.barnes-leman.com/en/luxury-real-estate/evian-les-bains-74500/",
+        tipo_transacao="venda",
+    ),
+]
+
 # Cada entrada: (instância do scraper, lista de targets)
 REGISTRY = [
     (Century21Scraper(), CENTURY21_TARGETS),
@@ -173,4 +198,5 @@ REGISTRY = [
     (GenericScraper(POIRIER_CONFIG), POIRIER_TARGETS),
     (GenericScraper(IMOGROUP_CONFIG), IMOGROUP_TARGETS),
     (GenericScraper(SQUARE_HABITAT_CONFIG), SQUARE_HABITAT_TARGETS),
+    (GenericScraper(BARNES_CONFIG), BARNES_TARGETS),
 ]
