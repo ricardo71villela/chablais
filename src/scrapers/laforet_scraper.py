@@ -53,7 +53,10 @@ class LaforetScraper(AgencyScraper):
 
         while page <= MAX_PAGES:
             page_url = target.listing_url if page == 1 else f"{target.listing_url}?page={page}"
-            soup = fetch_html_rendered(page_url, wait_selector="a[href*='/acheter/'], a[href*='/louer/']")
+            # Seletor específico do path dos anúncios (não do menu de navegação,
+            # que também contém links com "/acheter/" e faria a espera terminar cedo demais)
+            wait_selector = "a[href*='/agence-immobiliere/thonon-evian/acheter/'], a[href*='/agence-immobiliere/thonon-evian/louer/']"
+            soup = fetch_html_rendered(page_url, wait_selector=wait_selector)
             anchors = [
                 a for a in soup.find_all("a", href=True) if DETAIL_LINK_RE.search(a["href"])
             ]
