@@ -43,18 +43,26 @@ def fetch_html_rendered(url: str, wait_selector: str | None = None) -> Beautiful
 
     `wait_selector`: um seletor CSS a esperar aparecer antes de ler o HTML
     (ex. um link de anúncio), para garantir que o JavaScript já correu.
+
+    Usa wait_until="domcontentloaded" em vez de "networkidle" — muitos sites
+    têm scripts de analytics/publicidade que mantêm a rede sempre ativa e
+    nunca deixam o "networkidle" disparar, mesmo com o conteúdo principal já
+    carregado. O wait_for_selector a seguir garante que esperamos pelo
+    conteúdo real, não apenas pelo HTML inicial.
     """
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(user_agent=GENERIC_USER_AGENT)
-        page.goto(url, timeout=30000, wait_until="networkidle")
+        page.goto(url, timeout=45000, wait_until="domcontentloaded")
         if wait_selector:
             try:
-                page.wait_for_selector(wait_selector, timeout=10000)
+                page.wait_for_selector(wait_selector, timeout=20000)
             except Exception:
                 pass  # segue com o que já carregou, mesmo que o seletor não apareça
+        else:
+            page.wait_for_timeout(3000)  # dá tempo ao JS correr quando não há seletor específico
         html = page.content()
         browser.close()
     time.sleep(REQUEST_DELAY_SECONDS)
