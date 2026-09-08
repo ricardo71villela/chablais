@@ -1,12 +1,17 @@
 """Registo das agências-alvo, agrupadas por scraper/rede.
 
 Para adicionar uma nova agência a uma rede já suportada, basta acrescentar
-uma entrada AgencyTarget. Para uma rede nova, criar um adapter (ver
-century21_scraper.py como referência) e registar aqui.
+uma entrada AgencyTarget. Para uma rede nova simples (sem particularidades),
+usar o GenericScraper + SiteConfig. Só criar um adapter à parte (ver
+century21_scraper.py / laforet_scraper.py) quando o site tiver uma
+particularidade que o genérico não cubra.
 """
+import re
+
 from src.scrapers.base import AgencyTarget
 from src.scrapers.century21_scraper import Century21Scraper
 from src.scrapers.laforet_scraper import LaforetScraper
+from src.scrapers.generic_scraper import GenericScraper, SiteConfig
 
 CENTURY21_TARGETS = [
     AgencyTarget(
@@ -53,8 +58,51 @@ LAFORET_TARGETS = [
     ),
 ]
 
+# --- Poirier Immobilier ----------------------------------------------------
+# Confirmado: detail links em /vente/<id-cidade>/<tipo>/<id-slug>
+# Cada cidade tem o seu próprio URL de listagem, sem paginação por page= —
+# a página já mostra "Voir les X annonces" de uma vez (a confirmar em produção
+# se há paginação por scroll/"carregar mais" que este scraper não capta).
+POIRIER_CONFIG = SiteConfig(
+    network_name="Poirier",
+    detail_link_pattern=re.compile(r"/vente/\d+-[^/]+/[^/]+/\d+-[^/?#]+"),
+    page_url_template=None,
+)
+POIRIER_TARGETS = [
+    AgencyTarget(
+        agencia_nome="Poirier Immobilier Thonon",
+        cidade="Thonon",
+        listing_url="https://www.poirier-immobilier.com/vente/6-thonon-les-bains/1",
+        tipo_transacao="venda",
+    ),
+    AgencyTarget(
+        agencia_nome="Poirier Immobilier Évian",
+        cidade="Evian",
+        listing_url="https://www.poirier-immobilier.com/vente/5-evian-les-bains/1",
+        tipo_transacao="venda",
+    ),
+]
+
+# --- Imogroup ---------------------------------------------------------------
+# Confirmado: detail links em /fr/vente/vente-<tipo>-<cidade>,VA<id>
+IMOGROUP_CONFIG = SiteConfig(
+    network_name="Imogroup",
+    detail_link_pattern=re.compile(r"/fr/vente/vente-[^,/?#]+,VA\d+"),
+    page_url_template=None,  # a confirmar se há paginação além da 1ª página
+)
+IMOGROUP_TARGETS = [
+    AgencyTarget(
+        agencia_nome="Imogroup Thonon-Évian",
+        cidade="Thonon",
+        listing_url="https://www.imogroup-thonon-evian.com/fr/annonce-immobiliere/vente-thonon-les-bains-&-evian-les-bains/vente-appartement-a-thonon-les-bains-74200",
+        tipo_transacao="venda",
+    ),
+]
+
 # Cada entrada: (instância do scraper, lista de targets)
 REGISTRY = [
     (Century21Scraper(), CENTURY21_TARGETS),
     (LaforetScraper(), LAFORET_TARGETS),
+    (GenericScraper(POIRIER_CONFIG), POIRIER_TARGETS),
+    (GenericScraper(IMOGROUP_CONFIG), IMOGROUP_TARGETS),
 ]
