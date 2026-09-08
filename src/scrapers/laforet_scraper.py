@@ -34,7 +34,7 @@ from src.scrapers.base import (
     extract_price,
     extract_rooms,
     extract_surface,
-    fetch_html_rendered,
+    fetch_smart,
 )
 
 DETAIL_LINK_RE = re.compile(r"/agence-immobiliere/thonon-evian/(?:acheter|louer)/[^/?#]+/[^/?#]+-\d+")
@@ -56,7 +56,7 @@ class LaforetScraper(AgencyScraper):
             # Seletor específico do path dos anúncios (não do menu de navegação,
             # que também contém links com "/acheter/" e faria a espera terminar cedo demais)
             wait_selector = "a[href*='/agence-immobiliere/thonon-evian/acheter/'], a[href*='/agence-immobiliere/thonon-evian/louer/']"
-            soup = fetch_html_rendered(page_url, wait_selector=wait_selector)
+            soup = fetch_smart(page_url, DETAIL_LINK_RE, wait_selector=wait_selector)
             anchors = [
                 a for a in soup.find_all("a", href=True) if DETAIL_LINK_RE.search(a["href"])
             ]

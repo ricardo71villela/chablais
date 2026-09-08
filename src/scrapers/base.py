@@ -101,6 +101,30 @@ def fetch_html_rendered(url: str, wait_selector: str | None = None) -> Beautiful
     return BeautifulSoup(html, "html.parser")
 
 
+def fetch_smart(url: str, detail_link_pattern: re.Pattern, wait_selector: str | None = None) -> BeautifulSoup:
+    """Tenta primeiro um pedido HTTP simples (rápido); só recorre ao
+    Playwright (mais lento) se essa primeira tentativa não encontrar nenhum
+    link de anúncio a corresponder a `detail_link_pattern`.
+
+    Isto evita ter de decidir antecipadamente, agência a agência, se o site
+    precisa de JavaScript ou não — o próprio código deteta e adapta-se. Usar
+    esta função em vez de escolher fetch_html/fetch_html_rendered à mão em
+    cada scraper novo.
+    """
+    try:
+        soup = fetch_html(url)
+        if any(detail_link_pattern.search(a["href"]) for a in soup.find_all("a", href=True)):
+            return soup
+        log.info(
+            "fetch_smart(%s): pedido simples não encontrou anúncios — a tentar com Playwright",
+            url,
+        )
+    except Exception as e:
+        log.info("fetch_smart(%s): pedido simples falhou (%s) — a tentar com Playwright", url, e)
+
+    return fetch_html_rendered(url, wait_selector=wait_selector)
+
+
 # --- Helpers de extração por regex --------------------------------------
 
 PRICE_RE = re.compile(r"([\d\s]{3,})\s*€")

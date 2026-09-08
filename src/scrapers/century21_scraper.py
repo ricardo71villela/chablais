@@ -26,7 +26,7 @@ from src.scrapers.base import (
     extract_ref,
     extract_rooms,
     extract_surface,
-    fetch_html,
+    fetch_smart,
 )
 
 DETAIL_LINK_RE = re.compile(r"/trouver_logement/detail/\d+/?$")
@@ -47,7 +47,7 @@ class Century21Scraper(AgencyScraper):
                 if page == 1
                 else f"{target.listing_url.rstrip('/')}/page-{page}/"
             )
-            soup = fetch_html(page_url)
+            soup = fetch_smart(page_url, DETAIL_LINK_RE)
             anchors = [
                 a for a in soup.find_all("a", href=True) if DETAIL_LINK_RE.search(a["href"])
             ]
