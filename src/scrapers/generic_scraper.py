@@ -38,6 +38,9 @@ class SiteConfig:
     #: Deixar a None desativa a paginação (só lê a primeira página).
     page_url_template: str | None = "{base}?page={page}"
     wait_selector: str | None = None
+    #: seletor a clicar antes de esperar pelos anúncios (ex. botão
+    #: "Rechercher"), para sites cuja pesquisa só corre depois de um clique.
+    click_selector: str | None = None
     #: se o site mistura comunas vizinhas na mesma listagem (ex. "Achat
     #: appartement Thonon" também mostra Sciez, Cranves-Sales...), passar
     #: aqui as palavras (minúsculas) que têm de aparecer no texto do bloco
@@ -66,7 +69,10 @@ class GenericScraper(AgencyScraper):
                 break  # paginação desativada para este site
 
             soup = fetch_smart(
-                page_url, self.config.detail_link_pattern, wait_selector=self.config.wait_selector
+                page_url,
+                self.config.detail_link_pattern,
+                wait_selector=self.config.wait_selector,
+                click_selector=self.config.click_selector,
             )
             anchors = [
                 a

@@ -88,10 +88,14 @@ POIRIER_TARGETS = [
 # ex: /fr/vente/appartement-3-pieces-thonon-les-bains-74200/6798CD9C05576143944643
 # Listagem filtrada por tipo (site não parece ter uma vista "todos os tipos"
 # por cidade) — cobre apartamentos e casas, os tipos mais comuns.
+# ⚠️ Site com JS: o formulário de pesquisa já vem pré-preenchido pelo URL,
+# mas os anúncios só aparecem depois de clicar em "Rechercher" — usa
+# click_selector para simular isso automaticamente.
 IMOGROUP_CONFIG = SiteConfig(
     network_name="Imogroup",
     detail_link_pattern=re.compile(r"/fr/vente/[^/?#]+-\d{4,5}/[A-Za-z0-9]{15,}"),
     page_url_template=None,  # a confirmar se há paginação além da 1ª página
+    click_selector="button:has-text('Rechercher')",
 )
 IMOGROUP_TARGETS = [
     AgencyTarget(

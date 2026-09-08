@@ -38,7 +38,9 @@ def fetch_html(url: str) -> BeautifulSoup:
     return BeautifulSoup(resp.text, "html.parser")
 
 
-def fetch_html_rendered(url: str, wait_selector: str | None = None) -> BeautifulSoup:
+def fetch_html_rendered(
+    url: str, wait_selector: str | None = None, click_selector: str | None = None
+) -> BeautifulSoup:
     """Descarrega uma página usando um browser real (Playwright/Chromium),
     para sites cujo conteúdo é injetado por JavaScript depois do carregamento
     inicial (ex. Laforêt). Mais lento que fetch_html — só usar quando
@@ -46,6 +48,11 @@ def fetch_html_rendered(url: str, wait_selector: str | None = None) -> Beautiful
 
     `wait_selector`: um seletor CSS a esperar aparecer antes de ler o HTML
     (ex. um link de anúncio), para garantir que o JavaScript já correu.
+
+    `click_selector`: um seletor CSS a clicar depois de fechar os cookies e
+    antes de esperar pelo `wait_selector` — para sites cuja pesquisa só
+    corre depois de um clique num botão (ex. "Rechercher"), mesmo quando os
+    filtros já vêm pré-preenchidos pelo URL.
 
     Usa wait_until="domcontentloaded" em vez de "networkidle" — muitos sites
     têm scripts de analytics/publicidade que mantêm a rede sempre ativa e
@@ -81,6 +88,13 @@ def fetch_html_rendered(url: str, wait_selector: str | None = None) -> Beautiful
             except Exception:
                 continue  # este banner não apareceu, tenta o próximo
 
+        if click_selector:
+            try:
+                page.click(click_selector, timeout=5000)
+                page.wait_for_timeout(1000)
+            except Exception as e:
+                log.info("fetch_html_rendered(%s): falhou a clicar em '%s' (%s)", url, click_selector, e)
+
         if wait_selector:
             try:
                 page.wait_for_selector(wait_selector, timeout=20000)
@@ -101,7 +115,12 @@ def fetch_html_rendered(url: str, wait_selector: str | None = None) -> Beautiful
     return BeautifulSoup(html, "html.parser")
 
 
-def fetch_smart(url: str, detail_link_pattern: re.Pattern, wait_selector: str | None = None) -> BeautifulSoup:
+def fetch_smart(
+    url: str,
+    detail_link_pattern: re.Pattern,
+    wait_selector: str | None = None,
+    click_selector: str | None = None,
+) -> BeautifulSoup:
     """Tenta primeiro um pedido HTTP simples (rápido); só recorre ao
     Playwright (mais lento) se essa primeira tentativa não encontrar nenhum
     link de anúncio a corresponder a `detail_link_pattern`.
@@ -122,7 +141,7 @@ def fetch_smart(url: str, detail_link_pattern: re.Pattern, wait_selector: str | 
     except Exception as e:
         log.info("fetch_smart(%s): pedido simples falhou (%s) — a tentar com Playwright", url, e)
 
-    return fetch_html_rendered(url, wait_selector=wait_selector)
+    return fetch_html_rendered(url, wait_selector=wait_selector, click_selector=click_selector)
 
 
 # --- Helpers de extração por regex --------------------------------------
