@@ -24,11 +24,41 @@ REQUEST_DELAY_SECONDS = 1.5  # rate-limiting educado — não sobrecarregar os s
 
 def fetch_html(url: str) -> BeautifulSoup:
     """Descarrega uma página e devolve o BeautifulSoup. Aplica um atraso
-    fixo para não bombardear o site (ver REQUEST_DELAY_SECONDS)."""
+    fixo para não bombardear o site (ver REQUEST_DELAY_SECONDS).
+
+    Usa apenas um pedido HTTP simples — não executa JavaScript. Para sites
+    que carregam os anúncios via JavaScript (ex. Laforêt), usar
+    fetch_html_rendered() em vez desta."""
     resp = requests.get(url, headers={"User-Agent": GENERIC_USER_AGENT}, timeout=20)
     resp.raise_for_status()
     time.sleep(REQUEST_DELAY_SECONDS)
     return BeautifulSoup(resp.text, "html.parser")
+
+
+def fetch_html_rendered(url: str, wait_selector: str | None = None) -> BeautifulSoup:
+    """Descarrega uma página usando um browser real (Playwright/Chromium),
+    para sites cujo conteúdo é injetado por JavaScript depois do carregamento
+    inicial (ex. Laforêt). Mais lento que fetch_html — só usar quando
+    necessário.
+
+    `wait_selector`: um seletor CSS a esperar aparecer antes de ler o HTML
+    (ex. um link de anúncio), para garantir que o JavaScript já correu.
+    """
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page(user_agent=GENERIC_USER_AGENT)
+        page.goto(url, timeout=30000, wait_until="networkidle")
+        if wait_selector:
+            try:
+                page.wait_for_selector(wait_selector, timeout=10000)
+            except Exception:
+                pass  # segue com o que já carregou, mesmo que o seletor não apareça
+        html = page.content()
+        browser.close()
+    time.sleep(REQUEST_DELAY_SECONDS)
+    return BeautifulSoup(html, "html.parser")
 
 
 # --- Helpers de extração por regex --------------------------------------

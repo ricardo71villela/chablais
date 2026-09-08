@@ -12,11 +12,13 @@ Como o âmbito do projeto é só Thonon-les-Bains e Évian-les-Bains, este
 scraper filtra e descarta os imóveis de outras comunas (Perrignier,
 Douvaine, etc.) com base na cidade extraída de cada anúncio.
 
+⚠️ Este site carrega os anúncios via JavaScript (a página inicial vem vazia
+com um `requests` simples) — por isso usa fetch_html_rendered() (Playwright)
+em vez de fetch_html(). É mais lento a correr, mas é o que funciona aqui.
+
 Atenção: paginação assumida via `?page=N` (visto num URL de exemplo do
 mesmo site, para uma página de listagem diferente). Se a paginação não
-avançar como esperado, confirmar o mecanismo real (pode ser scroll
-infinito via JavaScript, o que exigiria Playwright em vez de requests
-simples).
+avançar como esperado, confirmar o mecanismo real.
 """
 import re
 from urllib.parse import urljoin
@@ -32,7 +34,7 @@ from src.scrapers.base import (
     extract_price,
     extract_rooms,
     extract_surface,
-    fetch_html,
+    fetch_html_rendered,
 )
 
 DETAIL_LINK_RE = re.compile(r"/agence-immobiliere/thonon-evian/(?:acheter|louer)/[^/?#]+/[^/?#]+-\d+")
@@ -51,7 +53,7 @@ class LaforetScraper(AgencyScraper):
 
         while page <= MAX_PAGES:
             page_url = target.listing_url if page == 1 else f"{target.listing_url}?page={page}"
-            soup = fetch_html(page_url)
+            soup = fetch_html_rendered(page_url, wait_selector="a[href*='/acheter/'], a[href*='/louer/']")
             anchors = [
                 a for a in soup.find_all("a", href=True) if DETAIL_LINK_RE.search(a["href"])
             ]
