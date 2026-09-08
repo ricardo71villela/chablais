@@ -64,15 +64,34 @@ class LaforetScraper(AgencyScraper):
                 break
 
             new_on_page = 0
+            # Agrupar todos os links (fotos + link de texto) pelo mesmo href,
+            # porque cada imóvel aparece repetido várias vezes na página —
+            # precisamos de ver todos antes de escolher qual tem a informação.
+            hrefs_para_anchors: dict[str, list] = {}
             for a in anchors:
                 href = urljoin(page_url, a["href"])
+                hrefs_para_anchors.setdefault(href, []).append(a)
+
+            for href, anchors_do_imovel in hrefs_para_anchors.items():
                 if href in seen_urls:
                     continue
                 seen_urls.add(href)
                 new_on_page += 1
 
-                block = a.find_parent(["article", "li", "div"]) or a
-                block_text = block.get_text(" ", strip=True)
+                # Preferimos o link cujo próprio texto já traz o preço
+                # (formato "Appartement 390 000 € CIDADE ..."); se nenhum
+                # tiver isso, usamos o bloco-pai do primeiro link como reserva.
+                block_text = ""
+                block = anchors_do_imovel[0]
+                for a in anchors_do_imovel:
+                    own_text = a.get_text(" ", strip=True)
+                    if "€" in own_text:
+                        block_text = own_text
+                        block = a
+                        break
+                if not block_text:
+                    block = block.find_parent(["article", "li", "div"]) or block
+                    block_text = block.get_text(" ", strip=True)
 
                 city_match = CITY_RE.search(block_text)
                 cidade_texto = city_match.group(1).strip() if city_match else ""
@@ -80,11 +99,11 @@ class LaforetScraper(AgencyScraper):
                 if not any(alvo in cidade_norm for alvo in CIDADES_ALVO):
                     continue  # fora do âmbito (comuna vizinha) — descarta
 
-                imgs = [
-                    img["src"]
-                    for img in block.find_all("img", src=True)
-                    if img["src"].startswith("http")
-                ]
+                imgs = []
+                for a in anchors_do_imovel:
+                    for img in a.find_all("img", src=True):
+                        if img["src"].startswith("http") and img["src"] not in imgs:
+                            imgs.append(img["src"])
 
                 listings.append(
                     Listing(
