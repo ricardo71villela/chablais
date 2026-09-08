@@ -38,6 +38,11 @@ class SiteConfig:
     #: Deixar a None desativa a paginação (só lê a primeira página).
     page_url_template: str | None = "{base}?page={page}"
     wait_selector: str | None = None
+    #: se o site mistura comunas vizinhas na mesma listagem (ex. "Achat
+    #: appartement Thonon" também mostra Sciez, Cranves-Sales...), passar
+    #: aqui as palavras (minúsculas) que têm de aparecer no texto do bloco
+    #: para o imóvel ser aceite. None desativa o filtro.
+    city_filter: set[str] | None = None
 
 
 class GenericScraper(AgencyScraper):
@@ -94,6 +99,11 @@ class GenericScraper(AgencyScraper):
                 if not block_text:
                     block = block.find_parent(["article", "li", "div"]) or block
                     block_text = block.get_text(" ", strip=True)
+
+                if self.config.city_filter:
+                    texto_lower = block_text.lower()
+                    if not any(cidade in texto_lower for cidade in self.config.city_filter):
+                        continue  # comuna vizinha fora do âmbito — descarta
 
                 imgs = []
                 for a in grupo:

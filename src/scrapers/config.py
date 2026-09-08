@@ -120,10 +120,53 @@ IMOGROUP_TARGETS = [
     ),
 ]
 
+# --- Square Habitat -----------------------------------------------------
+# Confirmado: server-side (sem JS), mas a listagem por cidade mistura
+# comunas vizinhas ("Appartements à proximité") — usa city_filter para só
+# aceitar Thonon/Évian. Detail links: /square-habitat-des-savoie/annonces/
+# biens/achat-ancien/<tipo>/<cidade-slug>/<uuid>, ou para o neuf:
+# /annonces/programmes/achat-neuf/<cidade-slug>/<uuid>
+SQUARE_HABITAT_CONFIG = SiteConfig(
+    network_name="SquareHabitat",
+    detail_link_pattern=re.compile(
+        r"/square-habitat-des-savoie/annonces/biens/achat-ancien/[^/?#]+/[^/?#]+/[0-9a-f-]{36}"
+        r"|/annonces/programmes/achat-neuf/[^/?#]+/[0-9a-f-]{36}"
+    ),
+    page_url_template=None,  # a confirmar se há paginação além da 1ª página
+    city_filter={"thonon", "evian", "évian"},
+)
+SQUARE_HABITAT_TARGETS = [
+    AgencyTarget(
+        agencia_nome="Square Habitat Thonon",
+        cidade="Thonon",
+        listing_url="https://www.squarehabitat.fr/annonces/achat/bien/appartement/immobilier/auvergne-rhone-alpes/haute-savoie/thonon-les-bains-74200",
+        tipo_transacao="venda",
+    ),
+    AgencyTarget(
+        agencia_nome="Square Habitat Thonon",
+        cidade="Thonon",
+        listing_url="https://www.squarehabitat.fr/annonces/achat/bien/maison/immobilier/auvergne-rhone-alpes/haute-savoie/thonon-les-bains-74200",
+        tipo_transacao="venda",
+    ),
+    AgencyTarget(
+        agencia_nome="Square Habitat Évian",
+        cidade="Evian",
+        listing_url="https://www.squarehabitat.fr/annonces/achat/bien/appartement/immobilier/auvergne-rhone-alpes/haute-savoie/evian-les-bains-74500",
+        tipo_transacao="venda",
+    ),
+    AgencyTarget(
+        agencia_nome="Square Habitat Évian",
+        cidade="Evian",
+        listing_url="https://www.squarehabitat.fr/annonces/achat/bien/maison/immobilier/auvergne-rhone-alpes/haute-savoie/evian-les-bains-74500",
+        tipo_transacao="venda",
+    ),
+]
+
 # Cada entrada: (instância do scraper, lista de targets)
 REGISTRY = [
     (Century21Scraper(), CENTURY21_TARGETS),
     (LaforetScraper(), LAFORET_TARGETS),
     (GenericScraper(POIRIER_CONFIG), POIRIER_TARGETS),
     (GenericScraper(IMOGROUP_CONFIG), IMOGROUP_TARGETS),
+    (GenericScraper(SQUARE_HABITAT_CONFIG), SQUARE_HABITAT_TARGETS),
 ]
