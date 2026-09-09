@@ -38,24 +38,33 @@ src/
 sql/
   schema.sql               # esquema Postgres/Supabase (tabelas agencias/imoveis)
 .github/workflows/
-  ingest.yml                # cron diário via GitHub Actions
+  ingest.yml                # cron mensal via GitHub Actions
 ```
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
+playwright install chromium   # necessário para o scraper do Laforêt (site com JS)
 cp .env.example .env   # preencher SUPABASE_URL e SUPABASE_KEY
 python -m src.main
 ```
 
-## Antes de pôr em produção
+## Deteção automática: JavaScript ou não?
 
-1. Validar manualmente o scraper Century21 contra o site real (a extração
-   aqui foi construída a partir de conteúdo já convertido em texto, não do
-   HTML bruto — os seletores por padrão de link `/trouver_logement/detail/`
-   são estáveis, mas vale a pena confirmar com uma inspeção rápida do DOM).
-2. Completar `laforet_scraper.py` com o padrão real de URL dos anúncios
-   individuais (inspecionar `view-source:` da página de listagem).
-3. Verificar `robots.txt` de cada site antes de ativar o cron em produção.
-4. Criar o projeto Supabase novo e aplicar `sql/schema.sql`.
+Cada scraper novo deve usar `fetch_smart(url, DETAIL_LINK_RE, wait_selector=...)`
+em vez de escolher `fetch_html`/`fetch_html_rendered` à mão. Esta função tenta
+primeiro um pedido HTTP simples (rápido); só recorre ao Playwright (mais lento)
+se essa tentativa não encontrar nenhum link de anúncio. Isto evita ter de
+adivinhar, site a site, se o conteúdo é carregado por JavaScript ou não — o
+próprio código deteta isso e adapta-se, o mesmo mecanismo que resolveu o caso
+do Laforêt.
+
+## Antes de adicionar uma agência nova
+
+1. Confirmar o padrão de URL dos anúncios individuais e da listagem
+   (inspecionar `view-source:` da página, ou pedir para eu verificar).
+2. Escrever o `DETAIL_LINK_RE` e usar `fetch_smart` — não é preciso decidir
+   antecipadamente se precisa de Playwright.
+3. Verificar `robots.txt` do site antes de ativar em produção.
+4. Testar localmente (ou via GitHub Actions) antes de dar como concluído.
