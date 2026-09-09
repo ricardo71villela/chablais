@@ -95,6 +95,7 @@ IMOGROUP_CONFIG = SiteConfig(
     network_name="Imogroup",
     detail_link_pattern=re.compile(r"/fr/vente/[^/?#]+-\d{4,5}/[A-Za-z0-9]{15,}"),
     page_url_template=None,  # a confirmar se há paginação além da 1ª página
+    wait_selector="a[href*='/fr/vente/']",
     click_selector=[
         "button:has-text('Rechercher')",
         "input[value='Rechercher']",
@@ -439,6 +440,7 @@ PEILLEX_CONFIG = SiteConfig(
     network_name="Peillex",
     detail_link_pattern=re.compile(r"/vente/[^/]+/[^/]+/\d{5}/[^/?#]+"),
     page_url_template=None,
+    wait_selector="a[href*='/vente/']",
     click_selector=[
         "button:has-text('Rechercher')",
         "input[value='Rechercher']",

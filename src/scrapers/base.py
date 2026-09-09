@@ -118,7 +118,7 @@ def fetch_html_rendered(
         for selector in click_selectors:
             try:
                 page.click(selector, timeout=6000)
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(3500)
                 clicou = True
                 log.info("fetch_html_rendered(%s): clique bem sucedido em '%s'", url, selector)
                 break
@@ -241,9 +241,33 @@ def extract_price(text: str) -> str | None:
     return m.group(1).replace(" ", "").strip() if m else None
 
 
+# Área habitável: "123 m²" / "123m2" — mas nunca um número que já pertença
+# à área de terreno (ver TERRAIN_SURFACE_RE), para não confundir as duas
+# quando só uma é mencionada no anúncio.
+TERRAIN_SURFACE_RE = re.compile(
+    r"terrain\D{0,40}?([\d\s]+[\d,.]*)\s*m[²2]"
+    r"|([\d\s]+[\d,.]*)\s*m[²2]\D{0,10}?de terrain",
+    re.IGNORECASE,
+)
+
+
+def _terrain_match_spans(text: str) -> list[tuple[int, int]]:
+    return [m.span() for m in TERRAIN_SURFACE_RE.finditer(text)]
+
+
 def extract_surface(text: str) -> str | None:
-    m = SURFACE_RE.search(text)
-    return m.group(1).replace(",", ".") if m else None
+    """Área habitável. Ignora números de "m²" que caiam dentro de uma
+    menção de área de terreno (usar extract_terrain_surface para essa) —
+    evita confundir área de terreno com área habitável quando só a
+    primeira é mencionada no anúncio (ex. "Terrain constructible de
+    619 m²", sem área habitável nenhuma)."""
+    spans_terreno = _terrain_match_spans(text)
+    for m in SURFACE_RE.finditer(text):
+        dentro_de_terreno = any(s <= m.start() < e for s, e in spans_terreno)
+        if dentro_de_terreno:
+            continue
+        return m.group(1).replace(",", ".")
+    return None
 
 
 def extract_rooms(text: str) -> int | None:
@@ -282,6 +306,40 @@ def extract_comodidades(text: str) -> list[str]:
         if re.search(pattern, text, re.IGNORECASE):
             found.append(label)
     return found
+
+
+# --- tipo de imóvel e superfície de terreno ------------------------------
+# Usados para a ponte com o Radar Léman (cruzamento por área, não por
+# morada — a área não pode ser omitida num anúncio, ao contrário da rua).
+
+TIPO_IMOVEL_KEYWORDS = [
+    # Casa/apartamento primeiro: uma "maison avec terrain de 787 m2" é uma
+    # Casa, não um Terreno — só classificamos como Terreno quando NENHUM
+    # tipo de construção é mencionado (terreno para construção, nu).
+    (r"\bappartements?\b|\bstudios?\b|\bduplex\b|\bT\d\b", "Apartamento"),
+    (r"\bmaisons?\b|\bvillas?\b|\bchalets?\b|\bpavillons?\b", "Casa"),
+    (r"\bimmeubles?\b", "Imóvel"),
+    (r"\blocaux?\b|\bbureaux?\b|\bcommerc(?:e|ial)\b|\bfonds? de commerce\b", "Comercial"),
+    (r"\bterrains?\b", "Terreno"),
+]
+
+# Área de terreno: só conta quando a palavra "terrain" aparece perto do
+# número (ver TERRAIN_SURFACE_RE, já definido acima).
+
+
+def extract_tipo_imovel(text: str) -> str | None:
+    for pattern, label in TIPO_IMOVEL_KEYWORDS:
+        if re.search(pattern, text, re.IGNORECASE):
+            return label
+    return None
+
+
+def extract_terrain_surface(text: str) -> str | None:
+    m = TERRAIN_SURFACE_RE.search(text)
+    if not m:
+        return None
+    raw = m.group(1) or m.group(2)
+    return raw.replace(" ", "").replace(",", ".") if raw else None
 
 
 @dataclass

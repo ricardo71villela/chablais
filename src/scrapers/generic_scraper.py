@@ -24,6 +24,8 @@ from src.scrapers.base import (
     extract_ref,
     extract_rooms,
     extract_surface,
+    extract_terrain_surface,
+    extract_tipo_imovel,
     fetch_smart,
 )
 
@@ -137,6 +139,8 @@ class GenericScraper(AgencyScraper):
                         dpe_classe=extract_dpe(block_text),
                         ano_construcao=extract_ano_construcao(block_text),
                         comodidades=extract_comodidades(block_text),
+                        tipo_imovel=extract_tipo_imovel(block_text),
+                        superficie_terreno_raw=extract_terrain_surface(block_text),
                     )
                 )
 

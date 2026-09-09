@@ -24,3 +24,5 @@ class Listing:
     dpe_classe: Optional[str] = None      # classe energética A-G, quando publicada
     ano_construcao: Optional[int] = None
     comodidades: list[str] = field(default_factory=list)  # ex. Garagem, Piscina, Terraço
+    tipo_imovel: Optional[str] = None     # Apartamento | Casa | Terreno | Imóvel | Comercial
+    superficie_terreno_raw: Optional[str] = None  # área do terreno, quando mencionada (casas)
