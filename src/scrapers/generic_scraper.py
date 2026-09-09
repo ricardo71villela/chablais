@@ -121,10 +121,22 @@ class GenericScraper(AgencyScraper):
                         if img["src"].startswith("http") and img["src"] not in imgs:
                             imgs.append(img["src"])
 
+                # Quando há city_filter, a agência cobre mais do que uma
+                # cidade — detetar a cidade real deste imóvel a partir do
+                # texto, em vez de usar sempre a do target (senão um imóvel
+                # de Thonon apanhado por uma agência "de Évian" ficava mal
+                # etiquetado, o que estragaria o cruzamento por área).
+                cidade_imovel = target.cidade
+                if self.config.city_filter:
+                    if "thonon" in texto_lower:
+                        cidade_imovel = "Thonon"
+                    elif "evian" in texto_lower or "évian" in texto_lower:
+                        cidade_imovel = "Evian"
+
                 listings.append(
                     Listing(
                         agencia_nome=target.agencia_nome,
-                        cidade=target.cidade,
+                        cidade=cidade_imovel,
                         url_anuncio=href,
                         tipo_transacao=target.tipo_transacao,
                         preco_raw=extract_price(block_text),
