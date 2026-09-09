@@ -39,7 +39,10 @@ def fetch_html(url: str) -> BeautifulSoup:
 
 
 def fetch_html_rendered(
-    url: str, wait_selector: str | None = None, click_selector: str | None = None
+    url: str,
+    wait_selector: str | None = None,
+    click_selector: str | list[str] | None = None,
+    debug_name: str | None = None,
 ) -> BeautifulSoup:
     """Descarrega uma página usando um browser real (Playwright/Chromium),
     para sites cujo conteúdo é injetado por JavaScript depois do carregamento
@@ -49,10 +52,13 @@ def fetch_html_rendered(
     `wait_selector`: um seletor CSS a esperar aparecer antes de ler o HTML
     (ex. um link de anúncio), para garantir que o JavaScript já correu.
 
-    `click_selector`: um seletor CSS a clicar depois de fechar os cookies e
-    antes de esperar pelo `wait_selector` — para sites cuja pesquisa só
-    corre depois de um clique num botão (ex. "Rechercher"), mesmo quando os
-    filtros já vêm pré-preenchidos pelo URL.
+    `click_selector`: um seletor CSS (ou lista de seletores alternativos, ex.
+    botão vs input[value=...] vs texto) a tentar clicar depois de fechar os
+    cookies e antes de esperar pelo `wait_selector` — para sites cuja
+    pesquisa só corre depois de um clique num botão (ex. "Rechercher"),
+    mesmo quando os filtros já vêm pré-preenchidos pelo URL. Tenta cada
+    seletor da lista por ordem até um funcionar; nenhum a funcionar não é
+    erro fatal, segue-se com o resto (scroll + espera).
 
     Usa wait_until="domcontentloaded" em vez de "networkidle" — muitos sites
     têm scripts de analytics/publicidade que mantêm a rede sempre ativa e
@@ -71,13 +77,33 @@ def fetch_html_rendered(
         "button:has-text('Accepter')",
         "button:has-text(\"J'accepte\")",
         "button:has-text('Tout accepter')",
+        "button:has-text('Tout Accepter')",
         ".axeptio_widget button",
         "#axeptio_btn_acceptAll",
+        "#tarteaucitronAllAllowed",
+        "text=Tout accepter",
     ]
+
+    click_selectors = (
+        [click_selector] if isinstance(click_selector, str) else (click_selector or [])
+    )
+
+    network_log: list[str] = []
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(user_agent=GENERIC_USER_AGENT)
+
+        if debug_name:
+            # Regista todos os pedidos XHR/fetch — ajuda a descobrir se o
+            # site carrega os anúncios via uma API interna (JSON) que
+            # poderíamos chamar diretamente, sem precisar de Playwright.
+            def registar_pedido(request):
+                if request.resource_type in ("xhr", "fetch"):
+                    network_log.append(f"{request.method} {request.url}")
+
+            page.on("request", registar_pedido)
+
         page.goto(url, timeout=45000, wait_until="domcontentloaded")
 
         for selector in COOKIE_BUTTON_SELECTORS:
@@ -88,12 +114,27 @@ def fetch_html_rendered(
             except Exception:
                 continue  # este banner não apareceu, tenta o próximo
 
-        if click_selector:
+        clicou = False
+        for selector in click_selectors:
             try:
-                page.click(click_selector, timeout=5000)
-                page.wait_for_timeout(1000)
-            except Exception as e:
-                log.info("fetch_html_rendered(%s): falhou a clicar em '%s' (%s)", url, click_selector, e)
+                page.click(selector, timeout=6000)
+                page.wait_for_timeout(1500)
+                clicou = True
+                log.info("fetch_html_rendered(%s): clique bem sucedido em '%s'", url, selector)
+                break
+            except Exception:
+                continue  # este seletor não existe/não é clicável, tenta o próximo
+        if click_selectors and not clicou:
+            log.info(
+                "fetch_html_rendered(%s): nenhum dos seletores de clique funcionou (%s)",
+                url, click_selectors,
+            )
+
+        # Scroll até ao fim algumas vezes — cobre sites com carregamento
+        # "lazy" ao rolar, além (ou em vez) de um clique de pesquisa.
+        for _ in range(3):
+            page.mouse.wheel(0, 2000)
+            page.wait_for_timeout(500)
 
         if wait_selector:
             try:
@@ -110,6 +151,24 @@ def fetch_html_rendered(
                 "fetch_html_rendered(%s): %d elementos a corresponder a '%s', HTML com %d chars, título='%s'",
                 url, count, wait_selector, len(html), page.title(),
             )
+            if count == 0 and debug_name:
+                import os
+
+                os.makedirs("debug_artifacts", exist_ok=True)
+                try:
+                    page.screenshot(path=f"debug_artifacts/{debug_name}.png", full_page=True)
+                    with open(f"debug_artifacts/{debug_name}.html", "w", encoding="utf-8") as f:
+                        f.write(html)
+                    if network_log:
+                        with open(f"debug_artifacts/{debug_name}_network.txt", "w", encoding="utf-8") as f:
+                            f.write("\n".join(network_log))
+                    log.info(
+                        "fetch_html_rendered(%s): 0 elementos encontrados — guardei "
+                        "debug_artifacts/%s.png, .html%s para inspeção",
+                        url, debug_name, " e _network.txt" if network_log else "",
+                    )
+                except Exception as e:
+                    log.info("fetch_html_rendered(%s): falhou a guardar debug (%s)", url, e)
         browser.close()
     time.sleep(REQUEST_DELAY_SECONDS)
     return BeautifulSoup(html, "html.parser")
@@ -119,7 +178,8 @@ def fetch_smart(
     url: str,
     detail_link_pattern: re.Pattern,
     wait_selector: str | None = None,
-    click_selector: str | None = None,
+    click_selector: str | list[str] | None = None,
+    debug_name: str | None = None,
 ) -> BeautifulSoup:
     """Tenta primeiro um pedido HTTP simples (rápido); só recorre ao
     Playwright (mais lento) se essa primeira tentativa não encontrar nenhum
@@ -141,7 +201,9 @@ def fetch_smart(
     except Exception as e:
         log.info("fetch_smart(%s): pedido simples falhou (%s) — a tentar com Playwright", url, e)
 
-    return fetch_html_rendered(url, wait_selector=wait_selector, click_selector=click_selector)
+    return fetch_html_rendered(
+        url, wait_selector=wait_selector, click_selector=click_selector, debug_name=debug_name
+    )
 
 
 # --- Helpers de extração por regex --------------------------------------

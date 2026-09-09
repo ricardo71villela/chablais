@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de imóveis — concorrência</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --ink: #1c2024;
+    --paper: #f7f5f1;
+    --line: #dcd7cd;
+    --muted: #756f64;
+    --accent: #2f4858;
+    --novo: #8a8478;
+    --contactado: #3d6b5c;
+    --interessante: #b0722f;
+    --descartado: #a8453c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+  }
+  #gate {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #gate input {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    width: 240px;
+  }
+  #gate button, .btn {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 10px 18px;
+    border-radius: 4px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: white;
+    cursor: pointer;
+  }
+  #gate-error { color: var(--descartado); font-size: 13px; min-height: 18px; }
+
+  header {
+    padding: 32px 40px 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-size: 28px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  header p { margin: 0; color: var(--muted); }
+
+  main { padding: 24px 40px 60px; max-width: 1400px; margin: 0 auto; }
+
+  .stats-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px 18px;
+    min-width: 170px;
+  }
+  .stat-card .label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .stat-card .value { font-family: 'IBM Plex Mono', monospace; font-size: 20px; font-weight: 500; }
+
+  .filters {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    align-items: center;
+  }
+  .filters select, .filters input {
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: white;
+  }
+  .filters .count { color: var(--muted); font-size: 13px; margin-left: auto; }
+
+  table { width: 100%; border-collapse: collapse; background: white; }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    font-size: 12px;
+    text-transform: none;
+    color: var(--muted);
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  th:hover { color: var(--ink); }
+  td.num, th.num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
+  td a { color: var(--accent); text-decoration: none; border-bottom: 1px solid currentColor; }
+  .capa { width: 64px; height: 48px; object-fit: cover; border-radius: 3px; background: var(--line); display: block; }
+  .sem-foto { width: 64px; height: 48px; border-radius: 3px; background: var(--line); }
+
+  select.status {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    padding: 4px 6px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+  }
+  select.status[data-v="novo"] { background: #efece5; color: var(--novo); }
+  select.status[data-v="contactado"] { background: #e2ede8; color: var(--contactado); }
+  select.status[data-v="interessante"] { background: #f5e6d3; color: var(--interessante); }
+  select.status[data-v="descartado"] { background: #f3e0dd; color: var(--descartado); }
+
+  textarea.nota {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    width: 160px;
+    height: 40px;
+    padding: 5px 7px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    resize: vertical;
+  }
+  .save-hint { font-size: 11px; color: var(--muted); }
+  #loading, #empty { padding: 40px; text-align: center; color: var(--muted); }
+
+  /* Vista em cartões — só aparece em ecrãs pequenos (telemóvel) */
+  #cards { display: none; flex-direction: column; gap: 10px; }
+  .card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    gap: 10px;
+  }
+  .card .capa, .card .sem-foto { width: 72px; height: 56px; flex-shrink: 0; }
+  .card .info { flex: 1; min-width: 0; }
+  .card .agencia { font-size: 12px; color: var(--muted); }
+  .card .preco { font-family: 'IBM Plex Mono', monospace; font-size: 16px; font-weight: 500; margin: 2px 0; }
+  .card .detalhes { font-size: 12px; color: var(--muted); }
+  .card .linha-acoes { display: flex; gap: 6px; margin-top: 8px; }
+  .card select.status { flex: 1; }
+  .card textarea.nota { width: 100%; margin-top: 6px; }
+  .card .ver-anuncio { font-size: 12px; }
+
+  @media (max-width: 720px) {
+    header { padding: 20px 16px 16px; }
+    main { padding: 16px; }
+    h1 { font-size: 22px; }
+    .filters { gap: 8px; }
+    .filters select, .filters input { flex: 1; min-width: 0; }
+    table { display: none !important; }
+    #cards { display: flex; }
+  }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <h1 style="font-size:22px;">Painel de imóveis</h1>
+  <input type="password" id="gate-pw" placeholder="Palavra-passe" autofocus>
+  <button onclick="tentarEntrar()">Entrar</button>
+  <div id="gate-error"></div>
+</div>
+
+<div id="app" style="display:none;">
+  <header>
+    <h1>Painel de imóveis — concorrência</h1>
+    <p>Thonon-les-Bains e Évian-les-Bains</p>
+  </header>
+  <main>
+    <div class="stats-row" id="stats"></div>
+    <div class="filters">
+      <select id="f-cidade"><option value="">Cidade (todas)</option></select>
+      <select id="f-agencia"><option value="">Agência (todas)</option></select>
+      <select id="f-tipo"><option value="">Venda/Arrendamento</option><option value="venda">Venda</option><option value="arrendamento">Arrendamento</option></select>
+      <select id="f-estado"><option value="">Estado (todos)</option><option value="novo">Novo</option><option value="contactado">Contactado</option><option value="interessante">Interessante</option><option value="descartado">Descartado</option></select>
+      <input type="number" id="f-preco-max" placeholder="Preço máx €">
+      <span class="count" id="contagem"></span>
+    </div>
+    <div id="loading">A carregar imóveis…</div>
+    <div id="empty" style="display:none;">Nenhum imóvel encontrado com estes filtros.</div>
+    <table id="tabela" style="display:none;">
+      <thead>
+        <tr>
+          <th></th>
+          <th data-sort="cidade">Cidade</th>
+          <th data-sort="agencia_nome">Agência</th>
+          <th data-sort="preco" class="num">Preço</th>
+          <th data-sort="superficie_m2" class="num">m²</th>
+          <th data-sort="preco_m2" class="num">€/m²</th>
+          <th data-sort="num_divisoes" class="num">Div.</th>
+          <th>DPE</th>
+          <th>Anúncio</th>
+          <th>Estado</th>
+          <th>Nota</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="cards"></div>
+  </main>
+</div>
+
+<script>
+// ⚠️ A chave "anon" é pública por natureza (fica sempre visível no código do
+// browser) — a segurança real vem das políticas RLS no Supabase, que só
+// permitem leitura e a função atualizar_nota_imovel (não escrita direta).
+const SUPABASE_URL = "COLOCAR_AQUI_O_TEU_SUPABASE_URL";
+const SUPABASE_ANON_KEY = "COLOCAR_AQUI_A_TUA_CHAVE_ANON";
+// Palavra-passe simples só para não ficar completamente aberto a quem tiver
+// o link. Não é segurança forte — é só um filtro de acesso casual.
+const PASSWORD = "MUDAR_ESTA_PASSWORD";
+
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let dados = [];
+let sortCol = "preco";
+let sortAsc = false;
+
+function tentarEntrar() {
+  const pw = document.getElementById("gate-pw").value;
+  if (pw === PASSWORD) {
+    sessionStorage.setItem("painel_autenticado", "1");
+    document.getElementById("gate").style.display = "none";
+    document.getElementById("app").style.display = "block";
+    carregar();
+  } else {
+    document.getElementById("gate-error").textContent = "Palavra-passe incorreta.";
+  }
+}
+document.getElementById("gate-pw").addEventListener("keydown", e => { if (e.key === "Enter") tentarEntrar(); });
+
+if (sessionStorage.getItem("painel_autenticado") === "1") {
+  document.getElementById("gate").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  carregar();
+}
+
+async function carregar() {
+  const { data: imoveis, error } = await supabase
+    .from("imoveis")
+    .select("*, agencias(nome, cidade, rede)")
+    .eq("estado", "ativo")
+    .order("preco", { ascending: false });
+
+  if (error) {
+    document.getElementById("loading").textContent = "Erro a carregar: " + error.message;
+    return;
+  }
+
+  dados = imoveis.map(i => ({
+    ...i,
+    agencia_nome: i.agencias ? i.agencias.nome : "—",
+    preco_m2: i.preco && i.superficie_m2 ? i.preco / i.superficie_m2 : null,
+  }));
+
+  popularFiltros();
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("tabela").style.display = "table";
+  render();
+}
+
+function popularFiltros() {
+  const cidades = [...new Set(dados.map(d => d.cidade).filter(Boolean))].sort();
+  const agencias = [...new Set(dados.map(d => d.agencia_nome).filter(Boolean))].sort();
+  const selCidade = document.getElementById("f-cidade");
+  const selAgencia = document.getElementById("f-agencia");
+  cidades.forEach(c => selCidade.appendChild(new Option(c, c)));
+  agencias.forEach(a => selAgencia.appendChild(new Option(a, a)));
+  [selCidade, selAgencia, document.getElementById("f-tipo"), document.getElementById("f-estado"), document.getElementById("f-preco-max")]
+    .forEach(el => el.addEventListener("input", render));
+  document.querySelectorAll("th[data-sort]").forEach(th => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.sort;
+      if (sortCol === col) sortAsc = !sortAsc; else { sortCol = col; sortAsc = true; }
+      render();
+    });
+  });
+}
+
+function filtrar() {
+  const cidade = document.getElementById("f-cidade").value;
+  const agencia = document.getElementById("f-agencia").value;
+  const tipo = document.getElementById("f-tipo").value;
+  const estado = document.getElementById("f-estado").value;
+  const precoMax = parseFloat(document.getElementById("f-preco-max").value);
+
+  return dados.filter(d => {
+    if (cidade && d.cidade !== cidade) return false;
+    if (agencia && d.agencia_nome !== agencia) return false;
+    if (tipo && d.tipo_transacao !== tipo) return false;
+    if (estado && (d.estado_contacto || "novo") !== estado) return false;
+    if (!isNaN(precoMax) && d.preco > precoMax) return false;
+    return true;
+  });
+}
+
+function criarControlosEstado(d) {
+  const select = document.createElement("select");
+  select.className = "status";
+  [["novo","Novo"],["contactado","Contactado"],["interessante","Interessante"],["descartado","Descartado"]]
+    .forEach(([v, label]) => select.appendChild(new Option(label, v)));
+  select.value = d.estado_contacto || "novo";
+  select.dataset.v = select.value;
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "nota";
+  textarea.placeholder = "Nota...";
+  textarea.value = d.nota_pessoal || "";
+
+  let timer;
+  const guardar = () => guardarNota(d, select.value, textarea.value);
+  select.addEventListener("change", () => { select.dataset.v = select.value; guardar(); });
+  textarea.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(guardar, 800); });
+
+  return { select, textarea };
+}
+
+function render() {
+  const filtrados = filtrar();
+  filtrados.sort((a, b) => {
+    const va = a[sortCol], vb = b[sortCol];
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    return sortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+  });
+
+  document.getElementById("contagem").textContent = filtrados.length + " imóveis";
+  document.getElementById("empty").style.display = filtrados.length === 0 ? "block" : "none";
+  document.getElementById("tabela").style.display = filtrados.length === 0 ? "none" : "";
+  document.getElementById("cards").style.display = filtrados.length === 0 ? "none" : "";
+
+  renderStats(filtrados);
+
+  const tbody = document.getElementById("tbody");
+  const cardsDiv = document.getElementById("cards");
+  tbody.innerHTML = "";
+  cardsDiv.innerHTML = "";
+
+  filtrados.forEach(d => {
+    const preco = d.preco ? d.preco.toLocaleString("fr-FR") + " €" : "—";
+    const precoM2 = d.preco_m2 ? Math.round(d.preco_m2).toLocaleString("fr-FR") + " €/m²" : "—";
+    const superficie = d.superficie_m2 ? d.superficie_m2 + " m²" : "—";
+    const fotoUrl = d.foto_capa;
+
+    // --- linha da tabela (desktop) ---
+    const tr = document.createElement("tr");
+    const fotoHtml = fotoUrl
+      ? `<img class="capa" src="${fotoUrl}" loading="lazy" onerror="this.style.visibility='hidden'">`
+      : `<div class="sem-foto"></div>`;
+    tr.innerHTML = `
+      <td>${fotoHtml}</td>
+      <td>${d.cidade || "—"}</td>
+      <td>${d.agencia_nome}</td>
+      <td class="num">${preco}</td>
+      <td class="num">${superficie}</td>
+      <td class="num">${precoM2}</td>
+      <td class="num">${d.num_divisoes ?? "—"}</td>
+      <td>${d.dpe_classe || "—"}</td>
+      <td><a href="${d.url_anuncio}" target="_blank" rel="noopener">ver</a></td>
+      <td></td>
+      <td></td>
+    `;
+    const ctrlLinha = criarControlosEstado(d);
+    tr.children[9].appendChild(ctrlLinha.select);
+    tr.children[10].appendChild(ctrlLinha.textarea);
+    tbody.appendChild(tr);
+
+    // --- cartão (telemóvel) ---
+    const card = document.createElement("div");
+    card.className = "card";
+    const cardFotoHtml = fotoUrl
+      ? `<img class="capa" src="${fotoUrl}" loading="lazy" onerror="this.style.visibility='hidden'">`
+      : `<div class="sem-foto"></div>`;
+    card.innerHTML = `
+      ${cardFotoHtml}
+      <div class="info">
+        <div class="agencia">${d.agencia_nome} · ${d.cidade || "—"}</div>
+        <div class="preco">${preco}</div>
+        <div class="detalhes">${superficie} · ${d.num_divisoes ?? "—"} div. · ${precoM2}${d.dpe_classe ? " · DPE " + d.dpe_classe : ""}</div>
+        <div class="linha-acoes"></div>
+      </div>
+    `;
+    const ctrlCard = criarControlosEstado(d);
+    const acoesDiv = card.querySelector(".linha-acoes");
+    acoesDiv.appendChild(ctrlCard.select);
+    const linkVer = document.createElement("a");
+    linkVer.href = d.url_anuncio;
+    linkVer.target = "_blank";
+    linkVer.rel = "noopener";
+    linkVer.className = "ver-anuncio";
+    linkVer.textContent = "Ver anúncio";
+    acoesDiv.appendChild(linkVer);
+    card.querySelector(".info").appendChild(ctrlCard.textarea);
+    cardsDiv.appendChild(card);
+  });
+}
+
+function renderStats(filtrados) {
+  const porAgencia = {};
+  filtrados.forEach(d => {
+    if (!d.preco_m2) return;
+    porAgencia[d.agencia_nome] = porAgencia[d.agencia_nome] || [];
+    porAgencia[d.agencia_nome].push(d.preco_m2);
+  });
+  const statsDiv = document.getElementById("stats");
+  statsDiv.innerHTML = "";
+  const total = filtrados.length;
+  const comPreco = filtrados.filter(d => d.preco_m2).map(d => d.preco_m2);
+  const media = comPreco.length ? Math.round(comPreco.reduce((a,b)=>a+b,0) / comPreco.length) : null;
+
+  statsDiv.appendChild(card("Imóveis (filtro atual)", total));
+  statsDiv.appendChild(card("€/m² médio", media ? media.toLocaleString("fr-FR") + " €" : "—"));
+
+  const agenciasOrdenadas = Object.entries(porAgencia)
+    .map(([nome, vals]) => [nome, vals.reduce((a,b)=>a+b,0) / vals.length])
+    .sort((a,b) => b[1] - a[1])
+    .slice(0, 3);
+  agenciasOrdenadas.forEach(([nome, v]) => {
+    statsDiv.appendChild(card(nome, Math.round(v).toLocaleString("fr-FR") + " €/m²"));
+  });
+}
+
+function card(label, value) {
+  const div = document.createElement("div");
+  div.className = "stat-card";
+  div.innerHTML = `<div class="label">${label}</div><div class="value">${value}</div>`;
+  return div;
+}
+
+async function guardarNota(imovel, estado, nota) {
+  const { error } = await supabase.rpc("atualizar_nota_imovel", {
+    p_imovel_id: imovel.id,
+    p_nota: nota,
+    p_estado: estado,
+  });
+  imovel.estado_contacto = estado;
+  imovel.nota_pessoal = nota;
+  if (error) console.error("Erro a guardar nota:", error);
+}
+</script>
+</body>
+</html>
