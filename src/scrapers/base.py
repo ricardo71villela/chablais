@@ -209,6 +209,12 @@ def fetch_smart(
 # --- Helpers de extração por regex --------------------------------------
 
 PRICE_RE = re.compile(r"([\d\s]{3,})\s*€")
+# Formato inglês (ex. sites em /en/, como a BARNES): "€561,500" — símbolo
+# ANTES do número, com vírgula como separador de milhares. Sem isto, a
+# regex acima apanhava por engano números de referência do imóvel que por
+# coincidência ficam logo antes de um "€" no texto (ex. "REF. SFA2335
+# €561,500" dava o preço errado 2335 em vez de 561500).
+PRICE_PREFIX_RE = re.compile(r"€\s*([\d][\d,.\s]{2,})")
 SURFACE_RE = re.compile(r"([\d,.]+)\s*m[²2]")
 ROOMS_RE = re.compile(r"(\d+)\s*pi[eè]ces?", re.IGNORECASE)
 BEDROOMS_RE = re.compile(r"(\d+)\s*chambres?", re.IGNORECASE)
@@ -237,6 +243,12 @@ COMODIDADES_KEYWORDS = {
 
 
 def extract_price(text: str) -> str | None:
+    # Tenta primeiro o formato "€ 561 500" (sites em inglês) — é mais
+    # específico (o € tem de vir mesmo antes do número), por isso tem
+    # prioridade sobre o formato "561 500 €" quando os dois aparecem.
+    m = PRICE_PREFIX_RE.search(text)
+    if m:
+        return m.group(1).replace(" ", "").replace(",", "").replace(".", "").strip()
     m = PRICE_RE.search(text)
     return m.group(1).replace(" ", "").strip() if m else None
 
