@@ -40,7 +40,7 @@ class SiteConfig:
     wait_selector: str | None = None
     #: seletor a clicar antes de esperar pelos anúncios (ex. botão
     #: "Rechercher"), para sites cuja pesquisa só corre depois de um clique.
-    click_selector: str | None = None
+    click_selector: str | list[str] | None = None
     #: se o site mistura comunas vizinhas na mesma listagem (ex. "Achat
     #: appartement Thonon" também mostra Sciez, Cranves-Sales...), passar
     #: aqui as palavras (minúsculas) que têm de aparecer no texto do bloco
@@ -68,11 +68,13 @@ class GenericScraper(AgencyScraper):
             else:
                 break  # paginação desativada para este site
 
+            debug_name = re.sub(r"[^a-zA-Z0-9]+", "_", f"{self.config.network_name}_{target.agencia_nome}_p{page}").strip("_")
             soup = fetch_smart(
                 page_url,
                 self.config.detail_link_pattern,
                 wait_selector=self.config.wait_selector,
                 click_selector=self.config.click_selector,
+                debug_name=debug_name,
             )
             anchors = [
                 a
