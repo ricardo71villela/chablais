@@ -239,7 +239,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // o link. Não é segurança forte — é só um filtro de acesso casual.
 const PASSWORD = "Leman2026";
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let dados = [];
 let sortCol = "preco";
@@ -265,7 +265,7 @@ if (sessionStorage.getItem("painel_autenticado") === "1") {
 }
 
 async function carregar() {
-  const { data: imoveis, error } = await supabase
+  const { data: imoveis, error } = await supabaseClient
     .from("imoveis")
     .select("*, agencias(nome, cidade, rede)")
     .eq("estado", "ativo")
@@ -457,7 +457,7 @@ function card(label, value) {
 }
 
 async function guardarNota(imovel, estado, nota) {
-  const { error } = await supabase.rpc("atualizar_nota_imovel", {
+  const { error } = await supabaseClient.rpc("atualizar_nota_imovel", {
     p_imovel_id: imovel.id,
     p_nota: nota,
     p_estado: estado,
