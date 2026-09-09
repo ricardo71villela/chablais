@@ -4,3 +4,4 @@ __pycache__/
 .venv/
 debug_artifacts/
 .DS_Store
+concorrencia_ativa.csv
