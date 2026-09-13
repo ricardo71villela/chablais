@@ -1,8 +1,8 @@
 """Testes da auditoria agência-a-agência de 13/set/2026.
 
-Reproduz os três bugs reais encontrados (confirmados contra o HTML ao vivo
-de várias agências, e no caso do bug 3 contra a corrida real do Ricardo) e
-confirma que ficam corrigidos:
+Reproduz os quatro bugs reais encontrados (confirmados contra o HTML ao vivo
+de várias agências, e no caso dos bugs 3 e 4 contra a corrida real do
+Ricardo) e confirma que ficam corrigidos:
 
 1. Separador de milhares com espaço especial (\xa0 /  ) fazia o preço/
    superfície ficar sempre vazio, mesmo quando o texto extraído já tinha o
@@ -26,6 +26,19 @@ confirma que ficam corrigidos:
    TiT Immobilier, Christelle Vannier Immobilier, Nestenn Évian), mesmo já
    com os bugs 1 e 2 corrigidos.
 
+4. A regex do preço aceitava qualquer sequência de dígitos e espaços antes
+   do "€", por mais longa que fosse — se o número de referência do imóvel
+   ficasse, no texto extraído, separado do preço só por espaço em branco
+   (sem o rótulo "Réf" à mistura, por este não ser um nó de texto), os dois
+   números colavam-se num só. Confirmado ao vivo (Agence Barnoud, garagem
+   em Évian-les-Bains, 13/set): texto "9585 23 500 €" (referência + preço)
+   dava 958 523 500 € em vez de 23 500 €, visível no dashboard como um
+   preço absurdo no topo da lista. Corrigido com uma regex mais rigorosa
+   (só aceita agrupamentos de milhares com exatamente 3 dígitos) mais uma
+   rede de segurança (PRECO_MAXIMO_PLAUSIVEL): qualquer preço acima de
+   10 milhões de euros -- não existe nenhum imóvel real nesta zona a esse
+   valor -- é descartado (fica vazio, nunca errado).
+
 Corre com: python3 test_scrapers_audit.py
 """
 import re
@@ -39,6 +52,7 @@ sys.path.insert(0, ".")
 from src.normalize import to_float, normalize
 from src.scrapers.base import (
     AgencyTarget,
+    PRECO_MAXIMO_PLAUSIVEL,
     climb_to_content_block,
     extract_price,
     extract_terrain_surface,
@@ -176,6 +190,53 @@ def test_climb_to_content_block_preco_perto_continua_rapido():
     check("climb_to_content_block para no nível certo quando já está perto", "495 000" in text)
 
 
+# --- Bug 4: referência do imóvel colada ao preço por espaço em branco -----
+
+def test_extract_price_nao_cola_referencia_ao_preco():
+    # Caso real confirmado ao vivo na Agence Barnoud (garagem, Évian-les-
+    # Bains, 13/set): "Réf" não é um nó de texto (vem por CSS/ícone), por
+    # isso o texto extraído do cartão tem só "9585" (a referência) seguido
+    # de espaço e do preço real "23 500 €" — sem nenhuma palavra a separar
+    # os dois números. A regex antiga colava tudo: 958523500.
+    texto = "9585 23 500 € Évian-les-Bains (74500)"
+    preco_raw = extract_price(texto)
+    check(
+        "extract_price não cola a referência (4 dígitos) ao preço",
+        preco_raw == "23500",
+        f"(preco_raw={preco_raw!r})",
+    )
+
+
+def test_extract_price_aceita_preco_sem_separador():
+    # Continua a funcionar quando o site não usa separador de milhares
+    # nenhum (ex. "300000 €") — a regex mais rigorosa não pode regredir
+    # neste caso, já coberto pelos testes do bug 3.
+    check("extract_price aceita preço sem separador", extract_price("Casa 300000 € Thonon") == "300000")
+
+
+def test_extract_price_aceita_multiplos_grupos_de_milhares():
+    check(
+        "extract_price aceita vários grupos de milhares (1 250 000 €)",
+        extract_price("Villa de luxo 1 250 000 € Évian") == "1250000",
+    )
+
+
+def test_extract_price_rede_de_seguranca_descarta_valor_implausivel():
+    # Mesmo que uma futura variação da regex volte a deixar passar uma
+    # concatenação (ex. uma referência de exatamente 3 dígitos colada a um
+    # preço já bem formatado), a rede de segurança tem de descartar
+    # qualquer valor acima de PRECO_MAXIMO_PLAUSIVEL em vez de o gravar.
+    texto = f"{PRECO_MAXIMO_PLAUSIVEL + 1} €"
+    check(
+        "extract_price descarta preço acima do limite plausível",
+        extract_price(texto) is None,
+    )
+    check(
+        "extract_price mantém preço no limite plausível",
+        extract_price(f"{PRECO_MAXIMO_PLAUSIVEL} €") == str(PRECO_MAXIMO_PLAUSIVEL),
+    )
+
+
 # --- Bug 3: falha a meio da paginação perdia as páginas já recolhidas -----
 
 def _pagina_1_com_um_imovel(href="/anuncio/1"):
@@ -287,6 +348,10 @@ if __name__ == "__main__":
     test_climb_to_content_block_encontra_preco_longe()
     test_climb_to_content_block_reserva_quando_nunca_encontra()
     test_climb_to_content_block_preco_perto_continua_rapido()
+    test_extract_price_nao_cola_referencia_ao_preco()
+    test_extract_price_aceita_preco_sem_separador()
+    test_extract_price_aceita_multiplos_grupos_de_milhares()
+    test_extract_price_rede_de_seguranca_descarta_valor_implausivel()
     test_generic_scraper_preserva_paginas_ja_recolhidas()
     test_laforet_scraper_preserva_paginas_ja_recolhidas()
     test_century21_scraper_preserva_paginas_ja_recolhidas()

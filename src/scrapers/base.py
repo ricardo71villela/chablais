@@ -208,13 +208,39 @@ def fetch_smart(
 
 # --- Helpers de extração por regex --------------------------------------
 
-PRICE_RE = re.compile(r"([\d\s]{3,})\s*€")
+PRICE_RE = re.compile(r"(\d+|\d{1,3}(?:\s\d{3})+)\s*€")
+# Antes disto era r"([\d\s]{3,})\s*€" — QUALQUER sequência de dígitos e
+# espaços antes do "€", por mais longa que fosse. Bug encontrado na
+# auditoria de 13/set: quando o número de referência do imóvel fica, no
+# texto extraído (climb_to_content_block usa get_text(" ")), separado do
+# preço só por espaço em branco — sem o rótulo "Réf" à mistura, porque esse
+# rótulo não é um nó de texto (ex. vem por CSS/ícone) — a regex antiga
+# colava os dois num só número. Caso real confirmado ao vivo (Agence
+# Barnoud, garagem em Évian-les-Bains): texto "9585 23 500 €" (referência
+# "9585" + preço real "23 500 €") dava o preço errado 958523500 € em vez
+# A nova regex só aceita um número formatado como um preço a sério: OU uma
+# sequência de dígitos sem espaço nenhum a meio (ex. "300000 €", sites que
+# não usam separador de milhares), OU 1-3 dígitos seguidos de um ou mais
+# grupos de EXATAMENTE 3 dígitos separados por um espaço (milhares, ex.
+# "1 250 000 €") — "9585" (4 dígitos colados, sem espaço nenhum a seguir)
+# não encaixa em nenhum dos dois casos, por isso a regex ignora-o e agarra
+# só o "23 500" a seguir.
 # Formato inglês (ex. sites em /en/, como a BARNES): "€561,500" — símbolo
 # ANTES do número, com vírgula como separador de milhares. Sem isto, a
 # regex acima apanhava por engano números de referência do imóvel que por
 # coincidência ficam logo antes de um "€" no texto (ex. "REF. SFA2335
 # €561,500" dava o preço errado 2335 em vez de 561500).
 PRICE_PREFIX_RE = re.compile(r"€\s*([\d][\d,.\s]{2,})")
+
+# Rede de segurança extra (2ª camada de defesa, bug de 13/set): nenhum
+# imóvel nesta zona (Chablais, Thonon-les-Bains/Évian-les-Bains) chega a
+# este valor — serve para descartar qualquer concatenação acidental de
+# números que a correção da regex acima não tenha previsto (ex. um número
+# de referência de exatamente 3 dígitos colado a um preço já bem formatado
+# também seria, por coincidência, um "grupo de milhares" válido). Preferimos
+# preço vazio (visível e igual ao caso Ripaille) a um preço absurdo que
+# passe despercebido numa comparação.
+PRECO_MAXIMO_PLAUSIVEL = 10_000_000
 SURFACE_RE = re.compile(r"([\d,.]+)\s*m[²2]")
 ROOMS_RE = re.compile(r"(\d+)\s*pi[eè]ces?", re.IGNORECASE)
 BEDROOMS_RE = re.compile(r"(\d+)\s*chambres?", re.IGNORECASE)
@@ -265,9 +291,20 @@ def extract_price(text: str) -> str | None:
     # prioridade sobre o formato "561 500 €" quando os dois aparecem.
     m = PRICE_PREFIX_RE.search(text)
     if m:
-        return _clean_numeric(m.group(1)).replace(",", "").replace(".", "").strip()
-    m = PRICE_RE.search(text)
-    return _clean_numeric(m.group(1)).strip() if m else None
+        raw = _clean_numeric(m.group(1)).replace(",", "").replace(".", "").strip()
+    else:
+        m = PRICE_RE.search(text)
+        raw = _clean_numeric(m.group(1)).strip() if m else None
+
+    if raw and raw.isdigit() and int(raw) > PRECO_MAXIMO_PLAUSIVEL:
+        log.warning(
+            "extract_price: preço implausível descartado (%s €, acima do limite de %s €) — "
+            "provável concatenação acidental de números (ex. referência do imóvel colada ao "
+            "preço, ver bug de 13/set); texto onde foi encontrado: %.150s",
+            raw, PRECO_MAXIMO_PLAUSIVEL, text,
+        )
+        return None
+    return raw
 
 
 # Área habitável: "123 m²" / "123m2" — mas nunca um número que já pertença
