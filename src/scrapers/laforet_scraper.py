@@ -20,6 +20,7 @@ Atenção: paginação assumida via `?page=N` (visto num URL de exemplo do
 mesmo site, para uma página de listagem diferente). Se a paginação não
 avançar como esperado, confirmar o mecanismo real.
 """
+import logging
 import re
 from urllib.parse import urljoin
 
@@ -27,6 +28,7 @@ from src.models import Listing
 from src.scrapers.base import (
     AgencyScraper,
     AgencyTarget,
+    climb_to_content_block,
     extract_ano_construcao,
     extract_bedrooms,
     extract_comodidades,
@@ -44,6 +46,8 @@ CITY_RE = re.compile(r"([A-ZÀ-Ü][A-ZÀ-Ü\s\-']{2,})\s*\((\d{5})\)")
 MAX_PAGES = 15
 CIDADES_ALVO = {"thonon", "evian", "évian"}  # filtra fora comunas vizinhas
 
+log = logging.getLogger(__name__)
+
 
 class LaforetScraper(AgencyScraper):
     network_name = "Laforet"
@@ -58,7 +62,18 @@ class LaforetScraper(AgencyScraper):
             # Seletor específico do path dos anúncios (não do menu de navegação,
             # que também contém links com "/acheter/" e faria a espera terminar cedo demais)
             wait_selector = "a[href*='/agence-immobiliere/thonon-evian/acheter/'], a[href*='/agence-immobiliere/thonon-evian/louer/']"
-            soup = fetch_smart(page_url, DETAIL_LINK_RE, wait_selector=wait_selector)
+            try:
+                soup = fetch_smart(page_url, DETAIL_LINK_RE, wait_selector=wait_selector)
+            except Exception:
+                # Mesmo bug encontrado no generic_scraper.py em 13/set: uma
+                # falha a meio da paginação não pode perder as páginas já
+                # recolhidas — devolve o que já há em vez de levantar.
+                log.warning(
+                    "Laforet — %s: falha a obter a página %d (%s) — a devolver "
+                    "%d imóvel/imóveis já recolhido(s) até aqui",
+                    target.agencia_nome, page, page_url, len(listings),
+                )
+                break
             anchors = [
                 a for a in soup.find_all("a", href=True) if DETAIL_LINK_RE.search(a["href"])
             ]
@@ -92,8 +107,7 @@ class LaforetScraper(AgencyScraper):
                         block = a
                         break
                 if not block_text:
-                    block = block.find_parent(["article", "li", "div"]) or block
-                    block_text = block.get_text(" ", strip=True)
+                    block, block_text = climb_to_content_block(block)
 
                 city_match = CITY_RE.search(block_text)
                 cidade_texto = city_match.group(1).strip() if city_match else ""

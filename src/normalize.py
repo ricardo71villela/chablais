@@ -1,5 +1,6 @@
 """Normalização dos campos brutos extraídos pelos scrapers."""
 import hashlib
+import re
 from typing import Any
 
 from src.models import Listing
@@ -8,8 +9,15 @@ from src.models import Listing
 def to_float(raw: str | None) -> float | None:
     if not raw:
         return None
+    # Defesa em profundidade: remove qualquer espaço (incluindo insecável /
+    # fino insecável, usados como separador de milhares em vários sites
+    # franceses) antes de converter. Os extratores em base.py já fazem esta
+    # limpeza na origem (ver _clean_numeric), mas float() falha em silêncio
+    # se algum valor escapar sem ela — repetir aqui garante que um preço/
+    # superfície nunca fica vazio só por causa de um espaço "invisível".
+    cleaned = re.sub(r"\s", "", raw).replace(",", ".")
     try:
-        return float(raw.replace(",", "."))
+        return float(cleaned)
     except ValueError:
         return None
 

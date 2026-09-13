@@ -8,6 +8,7 @@ scraper à parte (como century21_scraper.py ou laforet_scraper.py) quando o
 site tiver uma particularidade que este genérico não cubra (ex. filtro de
 comunas vizinhas, paginação num formato muito específico).
 """
+import logging
 import re
 from dataclasses import dataclass
 from urllib.parse import urljoin
@@ -16,6 +17,7 @@ from src.models import Listing
 from src.scrapers.base import (
     AgencyScraper,
     AgencyTarget,
+    climb_to_content_block,
     extract_ano_construcao,
     extract_bedrooms,
     extract_comodidades,
@@ -30,6 +32,8 @@ from src.scrapers.base import (
 )
 
 MAX_PAGES = 15
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -71,13 +75,35 @@ class GenericScraper(AgencyScraper):
                 break  # paginação desativada para este site
 
             debug_name = re.sub(r"[^a-zA-Z0-9]+", "_", f"{self.config.network_name}_{target.agencia_nome}_p{page}").strip("_")
-            soup = fetch_smart(
-                page_url,
-                self.config.detail_link_pattern,
-                wait_selector=self.config.wait_selector,
-                click_selector=self.config.click_selector,
-                debug_name=debug_name,
-            )
+            try:
+                soup = fetch_smart(
+                    page_url,
+                    self.config.detail_link_pattern,
+                    wait_selector=self.config.wait_selector,
+                    click_selector=self.config.click_selector,
+                    debug_name=debug_name,
+                )
+            except Exception:
+                # Bug encontrado na corrida de 13/set: uma falha a meio da
+                # paginação (ex. página 3 de 3, quando fetch_smart recorre ao
+                # Playwright por não encontrar mais anúncios e o Playwright
+                # falha — por exemplo por o browser não estar instalado)
+                # fazia esta função inteira levantar exceção, perdendo TODOS
+                # os imóveis já recolhidos nas páginas anteriores (o
+                # main.py descartava a corrida toda para esta agência).
+                # Isto explicou sozinho o "preço em falta a 100%" em 5
+                # agências inteiras (Greneche, Nestenn, Lehmann, TiT,
+                # Vannier) mesmo depois de corrigido o bug de extração —
+                # nunca chegavam a gravar nada, porque a página seguinte
+                # (normal, fim da paginação) rebentava antes. Agora: uma
+                # página que falha é tratada como fim da paginação, devolve
+                # o que já foi recolhido em vez de perder tudo.
+                log.warning(
+                    "%s — %s: falha a obter a página %d (%s) — a devolver "
+                    "%d imóvel/imóveis já recolhido(s) até aqui",
+                    self.config.network_name, target.agencia_nome, page, page_url, len(listings),
+                )
+                break
             anchors = [
                 a
                 for a in soup.find_all("a", href=True)
@@ -107,8 +133,7 @@ class GenericScraper(AgencyScraper):
                         block = a
                         break
                 if not block_text:
-                    block = block.find_parent(["article", "li", "div"]) or block
-                    block_text = block.get_text(" ", strip=True)
+                    block, block_text = climb_to_content_block(block)
 
                 if self.config.city_filter:
                     texto_lower = block_text.lower()

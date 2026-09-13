@@ -18,6 +18,7 @@
     --contactado: #3d6b5c;
     --interessante: #b0722f;
     --descartado: #a8453c;
+    --radar: #6b4e9c;
   }
   * { box-sizing: border-box; }
   body {
@@ -101,6 +102,18 @@
     border-radius: 4px;
     background: white;
   }
+  .filters label.chk {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--ink);
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+  }
   .filters .count { color: var(--muted); font-size: 13px; margin-left: auto; }
 
   table { width: 100%; border-collapse: collapse; background: white; }
@@ -123,6 +136,19 @@
   td.num, th.num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
   td a { color: var(--accent); text-decoration: none; border-bottom: 1px solid currentColor; }
   .save-hint { font-size: 11px; color: var(--muted); }
+
+  .selo-radar {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    color: var(--radar);
+    text-decoration: none;
+    border-bottom: 1px dashed currentColor;
+    white-space: nowrap;
+  }
+  .selo-radar:hover { border-bottom-style: solid; }
+  .sem-match { color: var(--muted); font-size: 12px; }
 
   select.status {
     font-family: 'Inter', sans-serif;
@@ -162,6 +188,7 @@
   .card .agencia { font-size: 12px; color: var(--muted); }
   .card .preco { font-family: 'IBM Plex Mono', monospace; font-size: 16px; font-weight: 500; margin: 2px 0; }
   .card .detalhes { font-size: 12px; color: var(--muted); }
+  .card .radar-linha { margin-top: 4px; }
   .card .linha-acoes { display: flex; gap: 6px; margin-top: 8px; }
   .card select.status { flex: 1; }
   .card textarea.nota { width: 100%; margin-top: 6px; }
@@ -200,6 +227,7 @@
       <select id="f-tipo"><option value="">Venda/Arrendamento</option><option value="venda">Venda</option><option value="arrendamento">Arrendamento</option></select>
       <select id="f-estado"><option value="">Estado (todos)</option><option value="novo">Novo</option><option value="contactado">Contactado</option><option value="interessante">Interessante</option><option value="descartado">Descartado</option></select>
       <input type="number" id="f-preco-max" placeholder="Preço máx €">
+      <label class="chk"><input type="checkbox" id="f-radar-match"> 🎯 só com correspondência Radar Léman</label>
       <span class="count" id="contagem"></span>
     </div>
     <div id="loading">A carregar imóveis…</div>
@@ -215,6 +243,7 @@
           <th data-sort="num_divisoes" class="num">Div.</th>
           <th>DPE</th>
           <th>Anúncio</th>
+          <th>🎯 Radar Léman</th>
           <th>Estado</th>
           <th>Nota</th>
         </tr>
@@ -293,6 +322,7 @@ function popularFiltros() {
   agencias.forEach(a => selAgencia.appendChild(new Option(a, a)));
   [selCidade, selAgencia, document.getElementById("f-tipo"), document.getElementById("f-estado"), document.getElementById("f-preco-max")]
     .forEach(el => el.addEventListener("input", render));
+  document.getElementById("f-radar-match").addEventListener("change", render);
   document.querySelectorAll("th[data-sort]").forEach(th => {
     th.addEventListener("click", () => {
       const col = th.dataset.sort;
@@ -308,6 +338,7 @@ function filtrar() {
   const tipo = document.getElementById("f-tipo").value;
   const estado = document.getElementById("f-estado").value;
   const precoMax = parseFloat(document.getElementById("f-preco-max").value);
+  const soRadarMatch = document.getElementById("f-radar-match").checked;
 
   return dados.filter(d => {
     if (cidade && d.cidade !== cidade) return false;
@@ -315,6 +346,7 @@ function filtrar() {
     if (tipo && d.tipo_transacao !== tipo) return false;
     if (estado && (d.estado_contacto || "novo") !== estado) return false;
     if (!isNaN(precoMax) && d.preco > precoMax) return false;
+    if (soRadarMatch && !d.radar_leman_match_label) return false;
     return true;
   });
 }
@@ -338,6 +370,16 @@ function criarControlosEstado(d) {
   textarea.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(guardar, 800); });
 
   return { select, textarea };
+}
+
+function seloRadarHtml(d) {
+  if (!d.radar_leman_match_label) return '<span class="sem-match">—</span>';
+  const dif = d.radar_leman_match_diferenca_pct != null ? ` (${d.radar_leman_match_diferenca_pct}% dif.)` : "";
+  const titulo = `${d.radar_leman_match_label}${dif}`;
+  if (d.radar_leman_match_link) {
+    return `<a class="selo-radar" href="${d.radar_leman_match_link}" target="_blank" rel="noopener" title="${titulo}">🎯 ${d.radar_leman_match_label}</a>`;
+  }
+  return `<span class="selo-radar" title="${titulo}">🎯 ${d.radar_leman_match_label}</span>`;
 }
 
 function render() {
@@ -365,6 +407,7 @@ function render() {
     const preco = d.preco ? d.preco.toLocaleString("fr-FR") + " €" : "—";
     const precoM2 = d.preco_m2 ? Math.round(d.preco_m2).toLocaleString("fr-FR") + " €/m²" : "—";
     const superficie = d.superficie_m2 ? d.superficie_m2 + " m²" : "—";
+    const selo = seloRadarHtml(d);
 
     // --- linha da tabela (desktop) ---
     const tr = document.createElement("tr");
@@ -377,12 +420,13 @@ function render() {
       <td class="num">${d.num_divisoes ?? "—"}</td>
       <td>${d.dpe_classe || "—"}</td>
       <td><a href="${d.url_anuncio}" target="_blank" rel="noopener">ver</a></td>
+      <td>${selo}</td>
       <td></td>
       <td></td>
     `;
     const ctrlLinha = criarControlosEstado(d);
-    tr.children[8].appendChild(ctrlLinha.select);
-    tr.children[9].appendChild(ctrlLinha.textarea);
+    tr.children[9].appendChild(ctrlLinha.select);
+    tr.children[10].appendChild(ctrlLinha.textarea);
     tbody.appendChild(tr);
 
     // --- cartão (telemóvel) ---
@@ -393,6 +437,7 @@ function render() {
         <div class="agencia">${d.agencia_nome} · ${d.cidade || "—"}</div>
         <div class="preco">${preco}</div>
         <div class="detalhes">${superficie} · ${d.num_divisoes ?? "—"} div. · ${precoM2}${d.dpe_classe ? " · DPE " + d.dpe_classe : ""}</div>
+        <div class="radar-linha">${selo}</div>
         <div class="linha-acoes"></div>
       </div>
     `;
@@ -423,9 +468,11 @@ function renderStats(filtrados) {
   const total = filtrados.length;
   const comPreco = filtrados.filter(d => d.preco_m2).map(d => d.preco_m2);
   const media = comPreco.length ? Math.round(comPreco.reduce((a,b)=>a+b,0) / comPreco.length) : null;
+  const comMatch = filtrados.filter(d => d.radar_leman_match_label).length;
 
   statsDiv.appendChild(card("Imóveis (filtro atual)", total));
   statsDiv.appendChild(card("€/m² médio", media ? media.toLocaleString("fr-FR") + " €" : "—"));
+  statsDiv.appendChild(card("🎯 com correspondência Radar Léman", comMatch));
 
   const agenciasOrdenadas = Object.entries(porAgencia)
     .map(([nome, vals]) => [nome, vals.reduce((a,b)=>a+b,0) / vals.length])

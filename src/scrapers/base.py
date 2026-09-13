@@ -242,15 +242,32 @@ COMODIDADES_KEYWORDS = {
 }
 
 
+def _clean_numeric(raw: str) -> str:
+    """Remove QUALQUER tipo de espaço — incluindo o espaço insecável (\xa0)
+    e o espaço fino insecável ( ) — antes de converter para número.
+
+    Bug encontrado na auditoria de 13/set: muitos sites franceses formatam
+    milhares com um destes espaços especiais em vez do espaço normal (ex.
+    "315 000 €", visualmente idêntico a "315 000 €" mas um carácter
+    diferente). O código antigo só removia o espaço ASCII normal
+    (`.replace(" ", "")`), pelo que o valor extraído ficava com o espaço
+    especial lá dentro (ex. "315 000") — `float()` rejeita isso e
+    devolve None silenciosamente. Isto explicava sozinho a maior parte dos
+    "preco vazio" na auditoria agência a agência (ex. Cabinet Greneche,
+    Nestenn: o preço era corretamente encontrado no texto, só a conversão
+    para número é que falhava depois)."""
+    return re.sub(r"\s", "", raw)
+
+
 def extract_price(text: str) -> str | None:
     # Tenta primeiro o formato "€ 561 500" (sites em inglês) — é mais
     # específico (o € tem de vir mesmo antes do número), por isso tem
     # prioridade sobre o formato "561 500 €" quando os dois aparecem.
     m = PRICE_PREFIX_RE.search(text)
     if m:
-        return m.group(1).replace(" ", "").replace(",", "").replace(".", "").strip()
+        return _clean_numeric(m.group(1)).replace(",", "").replace(".", "").strip()
     m = PRICE_RE.search(text)
-    return m.group(1).replace(" ", "").strip() if m else None
+    return _clean_numeric(m.group(1)).strip() if m else None
 
 
 # Área habitável: "123 m²" / "123m2" — mas nunca um número que já pertença
@@ -351,7 +368,49 @@ def extract_terrain_surface(text: str) -> str | None:
     if not m:
         return None
     raw = m.group(1) or m.group(2)
-    return raw.replace(" ", "").replace(",", ".") if raw else None
+    return _clean_numeric(raw).replace(",", ".") if raw else None
+
+
+MAX_BLOCK_CLIMB_LEVELS = 12
+
+
+def climb_to_content_block(anchor, marker: str = "€"):
+    """Sobe a árvore de ancestrais a partir do link do anúncio até encontrar
+    o primeiro que contenha `marker` (o preço, por omissão) no texto.
+
+    Bug encontrado na auditoria de 13/set: o código antigo usava sempre
+    `anchor.find_parent(["article", "li", "div"])` e parava no primeiro
+    destes três a aparecer — mas em vários sites (Poirier, Century21,
+    Dupraz, Cap Terrains, ...) esse primeiro ancestral é só um wrapper
+    estreito da fotografia, sem preço nenhum lá dentro; o preço só aparece
+    2-6 níveis acima. Isto fazia o preço (e tudo o resto extraído do mesmo
+    bloco: superfície, tipo de imóvel, comodidades) ficar sempre vazio,
+    mesmo o site publicando o preço normalmente em todos os anúncios.
+
+    Subir ancestral a ancestral, parando assim que o preço aparece, resolve
+    isto sem ter de conhecer a estrutura HTML específica de cada site — e
+    evita subir demasiado e apanhar o texto de vários cartões ao mesmo
+    tempo (o que misturaria dados de imóveis diferentes): paramos no
+    primeiro nível onde o marcador aparece, nunca mais acima.
+
+    Se nenhum ancestral (até MAX_BLOCK_CLIMB_LEVELS) tiver o marcador,
+    devolve o mesmo resultado de antes (o ancestral article/li/div mais
+    próximo) como reserva, para não regredir em nenhum caso onde o
+    comportamento antigo já funcionava."""
+    el = anchor
+    fallback = None
+    for _ in range(MAX_BLOCK_CLIMB_LEVELS):
+        parent = el.parent
+        if parent is None or getattr(parent, "name", None) in (None, "[document]"):
+            break
+        el = parent
+        if fallback is None and el.name in ("article", "li", "div"):
+            fallback = el
+        if marker in el.get_text(" ", strip=True):
+            return el, el.get_text(" ", strip=True)
+    if fallback is not None:
+        return fallback, fallback.get_text(" ", strip=True)
+    return anchor, anchor.get_text(" ", strip=True)
 
 
 @dataclass
