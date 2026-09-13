@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="fr">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Painel de imóveis — concorrência</title>
+<title>Stock immobilier du Léman (marché de la revente)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -174,6 +174,12 @@
   }
   #loading, #empty { padding: 40px; text-align: center; color: var(--muted); }
 
+  footer {
+    max-width: 1400px; margin: 0 auto; padding: 0 40px 40px;
+    font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px;
+  }
+  footer p { margin: 6px 0 0; }
+
   /* Vista em cartões — só aparece em ecrãs pequenos (telemóvel) */
   #cards { display: none; flex-direction: column; gap: 10px; }
   .card {
@@ -208,50 +214,54 @@
 <body>
 
 <div id="gate">
-  <h1 style="font-size:22px;">Painel de imóveis</h1>
-  <input type="password" id="gate-pw" placeholder="Palavra-passe" autofocus>
-  <button onclick="tentarEntrar()">Entrar</button>
+  <h1 style="font-size:22px;">Stock immobilier du Léman</h1>
+  <input type="password" id="gate-pw" placeholder="Mot de passe" autofocus>
+  <button onclick="tentarEntrar()">Entrer</button>
   <div id="gate-error"></div>
 </div>
 
 <div id="app" style="display:none;">
   <header>
-    <h1>Painel de imóveis — concorrência</h1>
-    <p>Thonon-les-Bains e Évian-les-Bains</p>
+    <h1>Stock immobilier du Léman (marché de la revente)</h1>
+    <p>Thonon-les-Bains et Évian-les-Bains</p>
   </header>
   <main>
     <div class="stats-row" id="stats"></div>
     <div class="filters">
-      <select id="f-cidade"><option value="">Cidade (todas)</option></select>
-      <select id="f-agencia"><option value="">Agência (todas)</option></select>
-      <select id="f-tipo"><option value="">Venda/Arrendamento</option><option value="venda">Venda</option><option value="arrendamento">Arrendamento</option></select>
-      <select id="f-estado"><option value="">Estado (todos)</option><option value="novo">Novo</option><option value="contactado">Contactado</option><option value="interessante">Interessante</option><option value="descartado">Descartado</option></select>
-      <input type="number" id="f-preco-max" placeholder="Preço máx €">
-      <label class="chk"><input type="checkbox" id="f-radar-match"> 🎯 só com correspondência Radar Léman</label>
+      <select id="f-cidade"><option value="">Ville (toutes)</option></select>
+      <select id="f-agencia"><option value="">Agence (toutes)</option></select>
+      <select id="f-tipo"><option value="">Vente/Location</option><option value="venda">Vente</option><option value="arrendamento">Location</option></select>
+      <select id="f-estado"><option value="">Statut (tous)</option><option value="novo">Nouveau</option><option value="contactado">Contacté</option><option value="interessante">Intéressant</option><option value="descartado">Écarté</option></select>
+      <input type="number" id="f-preco-max" placeholder="Prix max €">
+      <label class="chk"><input type="checkbox" id="f-radar-match"> 🎯 uniquement avec correspondance Radar Léman</label>
       <span class="count" id="contagem"></span>
     </div>
-    <div id="loading">A carregar imóveis…</div>
-    <div id="empty" style="display:none;">Nenhum imóvel encontrado com estes filtros.</div>
+    <div id="loading">Chargement des biens…</div>
+    <div id="empty" style="display:none;">Aucun bien trouvé avec ces filtres.</div>
     <table id="tabela" style="display:none;">
       <thead>
         <tr>
-          <th data-sort="cidade">Cidade</th>
-          <th data-sort="agencia_nome">Agência</th>
-          <th data-sort="preco" class="num">Preço</th>
+          <th data-sort="cidade">Ville</th>
+          <th data-sort="agencia_nome">Agence</th>
+          <th data-sort="preco" class="num">Prix</th>
           <th data-sort="superficie_m2" class="num">m²</th>
           <th data-sort="preco_m2" class="num">€/m²</th>
-          <th data-sort="num_divisoes" class="num">Div.</th>
+          <th data-sort="num_divisoes" class="num">Pièces</th>
           <th>DPE</th>
-          <th>Anúncio</th>
+          <th>Annonce</th>
           <th>🎯 Radar Léman</th>
-          <th>Estado</th>
-          <th>Nota</th>
+          <th>Statut</th>
+          <th>Note</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
     </table>
     <div id="cards"></div>
   </main>
+  <footer>
+    Ce stock est généré à partir du scraping des sites des agences concurrentes de Thonon-les-Bains et Évian-les-Bains. Relancez la collecte régulièrement pour actualiser les données.
+    <p>Développé par Z Operating System</p>
+  </footer>
 </div>
 
 <script>
@@ -278,7 +288,7 @@ function tentarEntrar() {
     document.getElementById("app").style.display = "block";
     carregar();
   } else {
-    document.getElementById("gate-error").textContent = "Palavra-passe incorreta.";
+    document.getElementById("gate-error").textContent = "Mot de passe incorrect.";
   }
 }
 document.getElementById("gate-pw").addEventListener("keydown", e => { if (e.key === "Enter") tentarEntrar(); });
@@ -297,7 +307,7 @@ async function carregar() {
     .order("preco", { ascending: false });
 
   if (error) {
-    document.getElementById("loading").textContent = "Erro a carregar: " + error.message;
+    document.getElementById("loading").textContent = "Erreur de chargement : " + error.message;
     return;
   }
 
@@ -354,14 +364,14 @@ function filtrar() {
 function criarControlosEstado(d) {
   const select = document.createElement("select");
   select.className = "status";
-  [["novo","Novo"],["contactado","Contactado"],["interessante","Interessante"],["descartado","Descartado"]]
+  [["novo","Nouveau"],["contactado","Contacté"],["interessante","Intéressant"],["descartado","Écarté"]]
     .forEach(([v, label]) => select.appendChild(new Option(label, v)));
   select.value = d.estado_contacto || "novo";
   select.dataset.v = select.value;
 
   const textarea = document.createElement("textarea");
   textarea.className = "nota";
-  textarea.placeholder = "Nota...";
+  textarea.placeholder = "Note...";
   textarea.value = d.nota_pessoal || "";
 
   let timer;
@@ -374,7 +384,7 @@ function criarControlosEstado(d) {
 
 function seloRadarHtml(d) {
   if (!d.radar_leman_match_label) return '<span class="sem-match">—</span>';
-  const dif = d.radar_leman_match_diferenca_pct != null ? ` (${d.radar_leman_match_diferenca_pct}% dif.)` : "";
+  const dif = d.radar_leman_match_diferenca_pct != null ? ` (${d.radar_leman_match_diferenca_pct}% d'écart)` : "";
   const titulo = `${d.radar_leman_match_label}${dif}`;
   if (d.radar_leman_match_link) {
     return `<a class="selo-radar" href="${d.radar_leman_match_link}" target="_blank" rel="noopener" title="${titulo}">🎯 ${d.radar_leman_match_label}</a>`;
@@ -391,7 +401,7 @@ function render() {
     return sortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
   });
 
-  document.getElementById("contagem").textContent = filtrados.length + " imóveis";
+  document.getElementById("contagem").textContent = filtrados.length + " biens";
   document.getElementById("empty").style.display = filtrados.length === 0 ? "block" : "none";
   document.getElementById("tabela").style.display = filtrados.length === 0 ? "none" : "";
   document.getElementById("cards").style.display = filtrados.length === 0 ? "none" : "";
@@ -449,7 +459,7 @@ function render() {
     linkVer.target = "_blank";
     linkVer.rel = "noopener";
     linkVer.className = "ver-anuncio";
-    linkVer.textContent = "Ver anúncio";
+    linkVer.textContent = "Voir l'annonce";
     acoesDiv.appendChild(linkVer);
     card.querySelector(".info").appendChild(ctrlCard.textarea);
     cardsDiv.appendChild(card);
@@ -470,9 +480,9 @@ function renderStats(filtrados) {
   const media = comPreco.length ? Math.round(comPreco.reduce((a,b)=>a+b,0) / comPreco.length) : null;
   const comMatch = filtrados.filter(d => d.radar_leman_match_label).length;
 
-  statsDiv.appendChild(card("Imóveis (filtro atual)", total));
-  statsDiv.appendChild(card("€/m² médio", media ? media.toLocaleString("fr-FR") + " €" : "—"));
-  statsDiv.appendChild(card("🎯 com correspondência Radar Léman", comMatch));
+  statsDiv.appendChild(card("Biens (filtre actuel)", total));
+  statsDiv.appendChild(card("€/m² moyen", media ? media.toLocaleString("fr-FR") + " €" : "—"));
+  statsDiv.appendChild(card("🎯 avec correspondance Radar Léman", comMatch));
 
   const agenciasOrdenadas = Object.entries(porAgencia)
     .map(([nome, vals]) => [nome, vals.reduce((a,b)=>a+b,0) / vals.length])
